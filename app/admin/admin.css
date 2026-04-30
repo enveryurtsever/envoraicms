@@ -1124,19 +1124,3 @@
 .adm-skel-row   { height: 0.9rem; margin: 0.45rem 0; }
 .adm-skel-cell  { height: 0.85rem; }
 
-/* Sidebar pending state — clicked but URL hasn't settled yet. */
-.admin-nav a.pending {
-  background: rgba(37, 99, 235, 0.08);
-  color: #1d4ed8;
-  position: relative;
-}
-.admin-nav a.pending::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: #2563eb;
-  border-radius: 0 2px 2px 0;
-}

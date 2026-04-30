@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "6mb",
     },
+    // dynamic=0 → on every internal nav, fall through to loading.tsx instead
+    // of holding the previous page on screen while the next route fetches.
+    // static=300 → keep prefetched static shells warm for 5 min so repeated
+    // back/forward navigations are instant.
+    staleTimes: {
+      dynamic: 0,
+      static: 300,
+    },
   },
   async rewrites() {
     if (process.env.NODE_ENV === "production") return [];
