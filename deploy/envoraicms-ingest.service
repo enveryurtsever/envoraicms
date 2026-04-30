@@ -1,0 +1,15 @@
+[Unit]
+Description=ENVORAICMS ingestion runner (CronJobs tablosundan due jobs)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/envoraicms
+EnvironmentFile=/var/www/envoraicms/.env.local
+ExecStart=/usr/bin/npm run ingest:runner
+StandardOutput=append:/var/log/envoraicms/ingest.log
+StandardError=append:/var/log/envoraicms/ingest.log
+TimeoutStartSec=15min
+User=www-data
+Group=www-data

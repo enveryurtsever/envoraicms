@@ -1,0 +1,227 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  color: #111827;
+  background-color: #ffffff;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+html[data-theme="dark"] body {
+  color: #e5e7eb;
+  background-color: #0b0f19;
+}
+
+html[data-theme="dark"] .content-body { color: #d1d5db; }
+html[data-theme="dark"] .content-body h2,
+html[data-theme="dark"] .content-body h3,
+html[data-theme="dark"] .content-body h4,
+html[data-theme="dark"] .content-body b,
+html[data-theme="dark"] .content-body strong { color: #f3f4f6; }
+html[data-theme="dark"] .content-body blockquote { color: #9ca3af; }
+html[data-theme="dark"] .ad-slot {
+  color: #94a3b8;
+  background-color: #111827;
+  border-color: #334155;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.04) 0,
+      rgba(255, 255, 255, 0.04) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+}
+html[data-theme="dark"] .ad-slot__label {
+  background: rgba(17, 24, 39, 0.9);
+  color: #cbd5e1;
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+.content-body {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: #1f2937;
+}
+.content-body h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 1.75rem 0 0.75rem;
+  color: #0f172a;
+}
+.content-body h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.5rem;
+  color: #0f172a;
+}
+.content-body h4 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.5rem;
+  color: #0f172a;
+}
+.content-body p {
+  margin: 0.75rem 0;
+}
+.content-body a {
+  color: #D21F2A;
+  text-decoration: underline;
+}
+.content-body ul,
+.content-body ol {
+  padding-left: 1.25rem;
+  margin: 0.75rem 0;
+}
+.content-body ul { list-style: disc; }
+.content-body ol { list-style: decimal; }
+.content-body li { margin: 0.35rem 0; }
+.content-body img {
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  max-width: 100%;
+  height: auto;
+}
+.content-body blockquote {
+  border-left: 3px solid #D21F2A;
+  padding: 0.25rem 1rem;
+  color: #475569;
+  margin: 1rem 0;
+  font-style: italic;
+}
+.content-body b, .content-body strong { font-weight: 700; color: #0f172a; }
+
+/* Ad slot placeholders — CSS-only. Slots fill their layout container; the
+   aspect-ratio keeps a designer-friendly shape per slot. Real ad tags get
+   injected into [data-ad-slot-inner] at runtime. */
+.ad-slot {
+  --ad-ratio: 12 / 1;
+  --ad-min-h: 72px;
+  --ad-max-h: none;
+  width: 100%;
+  aspect-ratio: var(--ad-ratio);
+  min-height: var(--ad-min-h);
+  max-height: var(--ad-max-h);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  color: #64748b;
+  background-color: #f8fafc;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(11, 30, 59, 0.04) 0,
+      rgba(11, 30, 59, 0.04) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+  border: 1.5px dashed #cbd5e1;
+  isolation: isolate;
+}
+.ad-slot__inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ad-slot__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #475569;
+  box-shadow: 0 1px 0 rgba(11, 30, 59, 0.04);
+}
+.ad-slot__label::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: #D21F2A;
+}
+.ad-slot__tag {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+/* Per-slot shape. Widths are fluid — ratios & min/max height keep the
+   placeholder useful on any container. */
+.ad-slot--leaderboard {
+  --ad-ratio: 6 / 1;
+  --ad-min-h: 90px;
+  --ad-max-h: 140px;
+}
+.ad-slot--billboard {
+  --ad-ratio: 4 / 1;
+  --ad-min-h: 140px;
+  --ad-max-h: 260px;
+}
+.ad-slot--mpu {
+  --ad-ratio: 4 / 3;
+  --ad-min-h: 220px;
+  --ad-max-h: 340px;
+}
+.ad-slot--in-article {
+  --ad-ratio: 16 / 9;
+  --ad-min-h: 180px;
+  --ad-max-h: 320px;
+}
+.ad-slot--half {
+  --ad-ratio: 1 / 1;
+  --ad-min-h: 260px;
+  --ad-max-h: 260px;
+}
+
+@media (min-width: 640px) {
+  .ad-slot--leaderboard      { --ad-ratio: 10 / 1; --ad-min-h: 90px;  --ad-max-h: 120px; }
+  .ad-slot--billboard        { --ad-ratio: 6 / 1;  --ad-min-h: 180px; --ad-max-h: 240px; }
+}
+@media (min-width: 1024px) {
+  .ad-slot--leaderboard      { --ad-ratio: 14 / 1; --ad-min-h: 90px;  --ad-max-h: 110px; }
+  .ad-slot--billboard        { --ad-ratio: 7 / 1;  --ad-min-h: 200px; --ad-max-h: 260px; }
+  .ad-slot--half             { --ad-ratio: 1 / 2;  --ad-min-h: 520px; --ad-max-h: 640px; }
+}

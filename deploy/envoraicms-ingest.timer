@@ -1,0 +1,13 @@
+[Unit]
+Description=ENVORAICMS ingest runner tick (10 dakikada bir)
+Requires=envoraicms-ingest.service
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+AccuracySec=30s
+Unit=envoraicms-ingest.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
