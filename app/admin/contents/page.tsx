@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import {
   countAdminContents,
   listAdminContents,
 } from "@/lib/queries/admin-contents";
 import { listAllCategories } from "@/lib/queries/admin-categories";
+import { FilterBarSkeleton, TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { deleteContentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,8 @@ function fmt(d: Date | string): string {
   });
 }
 
+/** Page returns the static shell synchronously — header + Suspense fallback
+ *  paint immediately on click. Data sections stream in behind Suspense. */
 export default async function ContentsPage({
   searchParams,
 }: {
@@ -33,6 +37,40 @@ export default async function ContentsPage({
   const catId = sp.cat ? Number(sp.cat) : null;
   const q = sp.q?.trim() || null;
 
+  return (
+    <>
+      <div className="admin-header">
+        <h2>Articles</h2>
+        <Link href="/admin/contents/new" className="btn">
+          Add Article
+        </Link>
+      </div>
+      {sp.deleted ? <div className="alert success">Content deleted.</div> : null}
+
+      <Suspense
+        key={`${page}|${catId ?? ""}|${q ?? ""}`}
+        fallback={
+          <>
+            <FilterBarSkeleton />
+            <TableSkeleton rows={8} cols={6} />
+          </>
+        }
+      >
+        <ContentsTable page={page} catId={catId} q={q} />
+      </Suspense>
+    </>
+  );
+}
+
+async function ContentsTable({
+  page,
+  catId,
+  q,
+}: {
+  page: number;
+  catId: number | null;
+  q: string | null;
+}) {
   const [items, total, cats] = await Promise.all([
     listAdminContents({
       limit: PAGE_SIZE,
@@ -45,7 +83,6 @@ export default async function ContentsPage({
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
   const buildHref = (p: number) => {
     const u = new URLSearchParams();
     if (catId) u.set("cat", String(catId));
@@ -57,14 +94,6 @@ export default async function ContentsPage({
 
   return (
     <>
-      <div className="admin-header">
-        <h2>Articles</h2>
-        <Link href="/admin/contents/new" className="btn">
-          Add Article
-        </Link>
-      </div>
-      {sp.deleted ? <div className="alert success">Content deleted.</div> : null}
-
       <form method="get" className="card" style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
         <select name="cat" defaultValue={catId ?? ""} style={{ padding: "0.45rem" }}>
           <option value="">All categories</option>

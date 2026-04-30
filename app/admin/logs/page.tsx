@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import {
@@ -5,6 +6,7 @@ import {
   countAuditLogs,
   listAuditAreas,
 } from "@/lib/queries/audit-logs";
+import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,22 @@ export default async function LogsPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const area = sp.area && sp.area !== "all" ? sp.area : null;
 
+  return (
+    <>
+      <div className="admin-header">
+        <h2>Audit Logs</h2>
+      </div>
+      <Suspense
+        key={`${page}|${area ?? ""}`}
+        fallback={<TableSkeleton rows={8} cols={4} />}
+      >
+        <LogsTable page={page} area={area} />
+      </Suspense>
+    </>
+  );
+}
+
+async function LogsTable({ page, area }: { page: number; area: string | null }) {
   const [rows, total, areas] = await Promise.all([
     listAuditLogs({ limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE, area }),
     countAuditLogs(area),
@@ -44,11 +62,9 @@ export default async function LogsPage({
 
   return (
     <>
-      <div className="admin-header">
-        <h2>Audit Logs</h2>
-        <small style={{ color: "#64748b" }}>{total} entries</small>
+      <div style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "0.6rem" }}>
+        {total} entries
       </div>
-
       <div className="card" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         <Link
           href="/admin/logs"

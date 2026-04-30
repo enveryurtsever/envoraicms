@@ -5,8 +5,6 @@ import { getUserById } from "@/lib/queries/users";
 import { ToastProvider } from "@/components/admin-ui/Toast";
 import { AdminHeader } from "@/components/admin-ui/AdminHeader";
 import { SidebarNav, type NavItem } from "@/components/admin-ui/SidebarNav";
-import { Suspense } from "react";
-import { TopProgress } from "@/components/admin-ui/TopProgress";
 import "./admin.css";
 
 export const dynamic = "force-dynamic";
@@ -55,9 +53,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <ToastProvider>
-      <Suspense fallback={null}>
-        <TopProgress />
-      </Suspense>
       <div className="admin-shell" style={{ display: "flex" }}>
         <aside className="admin-sidebar">
           <div className="admin-brand">

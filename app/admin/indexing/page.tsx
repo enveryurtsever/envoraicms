@@ -1,10 +1,33 @@
+import { Suspense } from "react";
 import { getSettings } from "@/lib/queries/settings";
 import { listRecentIndexingLog, countIndexingLog24h } from "@/lib/queries/indexing";
+import { CardSkeleton, TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { IndexingClient } from "./IndexingClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function IndexingPage() {
+export default function IndexingPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <div className="admin-header">
+            <div>
+              <div className="adm-skel adm-skel-title" />
+              <div className="adm-skel adm-skel-sub" />
+            </div>
+          </div>
+          <CardSkeleton rows={3} />
+          <TableSkeleton rows={5} cols={4} />
+        </>
+      }
+    >
+      <IndexingData />
+    </Suspense>
+  );
+}
+
+async function IndexingData() {
   const [settings, logs, counts] = await Promise.all([
     getSettings(),
     listRecentIndexingLog(50),
