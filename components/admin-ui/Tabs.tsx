@@ -20,26 +20,36 @@ export function Tabs({
   defaultTab?: string;
   storageKey?: string;
 }) {
-  const initial = (() => {
-    if (typeof window === "undefined") return defaultTab ?? tabs[0]?.id;
+  // First render must match the server output: always start with the default
+  // tab. We restore any persisted/hash selection inside an effect, so the
+  // mount-time tree is stable for hydration and the swap happens after.
+  const [active, setActive] = useState<string | undefined>(
+    defaultTab ?? tabs[0]?.id,
+  );
+
+  // Restore from URL hash / localStorage on mount.
+  useEffect(() => {
     const fromHash = window.location.hash.replace(/^#/, "");
-    if (fromHash && tabs.some((t) => t.id === fromHash)) return fromHash;
+    if (fromHash && tabs.some((t) => t.id === fromHash)) {
+      setActive(fromHash);
+      return;
+    }
     if (storageKey) {
       const saved = window.localStorage.getItem(storageKey);
-      if (saved && tabs.some((t) => t.id === saved)) return saved;
+      if (saved && tabs.some((t) => t.id === saved)) setActive(saved);
     }
-    return defaultTab ?? tabs[0]?.id;
-  })();
+    // tabs is stable across renders for a given page; only run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const [active, setActive] = useState<string | undefined>(initial);
-
+  // Persist + reflect in URL on change. Skipped on the initial mount commit
+  // because `active` then equals the server-rendered default and writing the
+  // hash here would double-fire with the restore effect above.
   useEffect(() => {
     if (!active) return;
-    if (typeof window !== "undefined") {
-      if (storageKey) window.localStorage.setItem(storageKey, active);
-      if (window.location.hash !== `#${active}`) {
-        history.replaceState(null, "", `#${active}`);
-      }
+    if (storageKey) window.localStorage.setItem(storageKey, active);
+    if (window.location.hash !== `#${active}`) {
+      history.replaceState(null, "", `#${active}`);
     }
   }, [active, storageKey]);
 
