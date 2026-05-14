@@ -177,10 +177,14 @@ async function runUpdate(job: UpdateJob): Promise<void> {
     throw err;
   }
 
-  // 4. npm ci
+  // 4. npm ci — force devDependencies even though PM2 sets NODE_ENV=production.
+  // Otherwise typescript/tsx (devDeps) go missing and the build step right
+  // after this fails with "Cannot find module 'typescript'" when Next tries
+  // to load next.config.ts.
   setStep(job, "install", "running");
   try {
-    await runCommand("npm", ["ci", "--no-audit", "--no-fund"], {
+    await runCommand("npm", ["ci", "--no-audit", "--no-fund", "--include=dev"], {
+      env: { NODE_ENV: "development" },
       onLine: lineCollector(job, "[npm ci]"),
     });
     setStep(job, "install", "done");
