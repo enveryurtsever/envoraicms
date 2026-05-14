@@ -14,10 +14,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         disallow: ["/admin", "/admin/", "/install", "/api/", "/search"],
       },
     ],
-    sitemap: [
-      absoluteUrl(settings.SiteUrl, "/sitemap.xml"),
-      absoluteUrl(settings.SiteUrl, "/news-sitemap.xml"),
-    ],
+    sitemap: absoluteUrl(settings.SiteUrl, "/sitemap.xml"),
     host: settings.SiteUrl,
   };
 }

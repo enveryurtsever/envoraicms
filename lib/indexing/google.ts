@@ -9,7 +9,7 @@ import { createSign } from "node:crypto";
 
 const OAUTH_URL = "https://oauth2.googleapis.com/token";
 const PUBLISH_URL = "https://indexing.googleapis.com/v3/urlNotifications:publish";
-const SCOPE = "https://www.googleapis.com/auth/indexing";
+const INDEXING_SCOPE = "https://www.googleapis.com/auth/indexing";
 
 export type ServiceAccount = {
   client_email: string;
@@ -51,12 +51,12 @@ export function parseServiceAccount(json: string): ServiceAccount {
   };
 }
 
-function signJwt(sa: ServiceAccount): string {
+function signJwt(sa: ServiceAccount, scope: string): string {
   const header = { alg: "RS256", typ: "JWT" };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: sa.client_email,
-    scope: SCOPE,
+    scope,
     aud: sa.token_uri ?? OAUTH_URL,
     iat: now,
     exp: now + 3600,
@@ -69,15 +69,16 @@ function signJwt(sa: ServiceAccount): string {
   return `${unsigned}.${b64url(sig)}`;
 }
 
-async function getAccessToken(sa: ServiceAccount): Promise<string> {
+export async function getAccessToken(sa: ServiceAccount, scope: string): Promise<string> {
   const cache = getCache();
-  const cached = cache.get(sa.client_email);
+  const cacheKey = `${sa.client_email}|${scope}`;
+  const cached = cache.get(cacheKey);
   const now = Date.now();
   if (cached && cached.expiresAt > now + 60_000) {
     return cached.token;
   }
 
-  const jwt = signJwt(sa);
+  const jwt = signJwt(sa, scope);
   const res = await fetch(sa.token_uri ?? OAUTH_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -95,7 +96,7 @@ async function getAccessToken(sa: ServiceAccount): Promise<string> {
     throw new Error("OAuth response missing access_token");
   }
   const ttl = (data.expires_in ?? 3600) * 1000;
-  cache.set(sa.client_email, { token: data.access_token, expiresAt: now + ttl });
+  cache.set(cacheKey, { token: data.access_token, expiresAt: now + ttl });
   return data.access_token;
 }
 
@@ -110,7 +111,7 @@ export async function publishUrl(
   url: string,
   type: NotifyType,
 ): Promise<PublishResult> {
-  const token = await getAccessToken(sa);
+  const token = await getAccessToken(sa, INDEXING_SCOPE);
   const res = await fetch(PUBLISH_URL, {
     method: "POST",
     headers: {

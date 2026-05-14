@@ -11,13 +11,15 @@ export default {
   theme: {
     extend: {
       colors: {
+        // brand / navy are driven by --brand-rgb and --navy-rgb, set per-request
+        // in app/layout.tsx from Settings.PrimaryColor / Settings.SecondaryColor.
         brand: {
-          DEFAULT: "#D21F2A",
-          dark: "#0B1E3B",
+          DEFAULT: "rgb(var(--brand-rgb) / <alpha-value>)",
+          dark: "rgb(var(--navy-rgb) / <alpha-value>)",
           accent: "#E63946",
         },
         navy: {
-          DEFAULT: "#0B1E3B",
+          DEFAULT: "rgb(var(--navy-rgb) / <alpha-value>)",
           700: "#122A55",
           600: "#1A3870",
         },

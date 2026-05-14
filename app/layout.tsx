@@ -1,16 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Inter } from "next/font/google";
 import { getSettings } from "@/lib/queries/settings";
 import { getHeaderCategories } from "@/lib/queries/categories";
-import { getFooterLinks } from "@/lib/queries/links";
+import { getActiveThemeSlug } from "@/lib/queries/themes";
 import { Header } from "@/components/Header";
 import { Nav } from "@/components/Nav";
-import { Footer } from "@/components/Footer";
+import { FooterStream } from "@/components/Footer";
 import { JsonLd } from "@/components/JsonLd";
 import { siteMetadata, websiteJsonLd, organizationJsonLd } from "@/lib/seo";
 import { readColorPreference, resolveColorMode } from "@/lib/theme-mode";
+import { brandColorsCss } from "@/lib/brand-colors";
+import { htmlLang } from "@/lib/site-language";
 import { isInstalled } from "@/lib/install/guard";
 import "./globals.css";
 
@@ -53,19 +56,25 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   if (isAdmin) {
-    // The admin subtree provides its own shell; site chrome is skipped.
+    // The admin subtree provides its own shell; site chrome is skipped. Pull
+    // the configured site language so the admin <html lang> matches the public
+    // site for consistency.
+    const adminLang = htmlLang((await getSettings()).SiteLanguage);
     return (
-      <html lang="en" className={inter.variable}>
+      <html lang={adminLang} className={inter.variable}>
         <body className="font-sans antialiased">{children}</body>
       </html>
     );
   }
 
-  const [settings, categories, footerLinks, preference] = await Promise.all([
+  // Footer's link rows are fetched inside <Suspense> below — keeping them
+  // out of this Promise.all lets the shell stream as soon as the
+  // shell-critical queries (settings/categories/theme) settle.
+  const [settings, categories, preference, themeSlug] = await Promise.all([
     getSettings(),
     getHeaderCategories(),
-    getFooterLinks(),
     readColorPreference(),
+    getActiveThemeSlug(),
   ]);
 
   const gaId = settings.GoogleAnalyticsID;
@@ -77,8 +86,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const colorMode = resolveColorMode(effectivePreference, settings.DefaultColorMode);
 
   return (
-    <html lang="en" className={inter.variable} data-theme={colorMode}>
+    <html lang={htmlLang(settings.SiteLanguage)} className={inter.variable} data-theme={colorMode} data-site-theme={themeSlug}>
       <head>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: brandColorsCss(settings.PrimaryColor, settings.SecondaryColor),
+          }}
+        />
         {settings.SearchConsoleMeta ? (
           <meta name="google-site-verification" content={settings.SearchConsoleMeta} />
         ) : null}
@@ -140,15 +154,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               ? categories.filter((c) => c.HeaderMenu).slice(0, 5)
               : []
           }
+          allCategories={categories}
+          showHeaderMenu={settings.ShowHeaderMenu !== false}
         />
         {settings.ShowHeaderMenu !== false ? <Nav categories={categories} /> : null}
         <main className="mx-auto w-full max-w-container px-4 py-6 md:py-8">{children}</main>
-        <Footer
-          settings={settings}
-          categories={settings.ShowFooterMenu !== false ? categories : []}
-          pages={settings.ShowFooterMenu !== false ? footerLinks.pages : []}
-          socials={footerLinks.socials}
-        />
+        <Suspense fallback={<div className="mt-16 h-64 border-t border-neutral-200 bg-navy" />}>
+          <FooterStream settings={settings} categories={categories} />
+        </Suspense>
         <JsonLd data={websiteJsonLd(settings)} />
         <JsonLd data={organizationJsonLd(settings)} />
         {settings.HeaderScripts ? (

@@ -63,9 +63,10 @@ export function submitIndexingFireAndForget(
   });
 }
 
-export async function buildContentUrl(slug: string): Promise<string> {
+export async function buildContentUrl(catSeo: string, slug: string): Promise<string> {
   const settings = await getSettings();
   const base = (settings.SiteUrl ?? "").replace(/\/+$/, "");
-  if (!base) return `/s/${slug}`;
-  return `${base}/s/${slug}`;
+  const path = `/${catSeo}/${slug}`;
+  return base ? `${base}${path}` : path;
 }
+

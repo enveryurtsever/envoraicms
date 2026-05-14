@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: light;
+  /* Default brand channels — overridden inline in <head> by layout.tsx from
+     Settings.PrimaryColor / Settings.SecondaryColor when those are set. */
+  --brand-rgb: 210 31 42;
+  --navy-rgb: 11 30 59;
 }
 
 html[data-theme="dark"] {
@@ -68,32 +72,45 @@ html[data-theme="dark"] .ad-slot__label {
 
 .content-body {
   font-size: 1.0625rem;
-  line-height: 1.75;
+  line-height: 1.8;
   color: #1f2937;
 }
 .content-body h2 {
   font-size: 1.5rem;
   font-weight: 700;
-  margin: 1.75rem 0 0.75rem;
+  margin: 2.25rem 0 0.75rem;
   color: #0f172a;
 }
 .content-body h3 {
   font-size: 1.25rem;
   font-weight: 700;
-  margin: 1.5rem 0 0.5rem;
+  margin: 1.75rem 0 0.5rem;
   color: #0f172a;
 }
 .content-body h4 {
   font-size: 1.0625rem;
   font-weight: 700;
-  margin: 1.25rem 0 0.5rem;
+  margin: 1.5rem 0 0.5rem;
   color: #0f172a;
 }
 .content-body p {
-  margin: 0.75rem 0;
+  margin: 0 0 1.25rem;
+}
+.content-body > p:first-of-type {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: #0f172a;
+}
+html[data-theme="dark"] .content-body > p:first-of-type { color: #f1f5f9; }
+/* Inline keyword links — softer underline so the article reads like editorial,
+   not a wall of red. */
+.content-body a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 .content-body a {
-  color: #D21F2A;
+  color: rgb(var(--brand-rgb));
   text-decoration: underline;
 }
 .content-body ul,
@@ -111,7 +128,7 @@ html[data-theme="dark"] .ad-slot__label {
   height: auto;
 }
 .content-body blockquote {
-  border-left: 3px solid #D21F2A;
+  border-left: 3px solid rgb(var(--brand-rgb));
   padding: 0.25rem 1rem;
   color: #475569;
   margin: 1rem 0;
@@ -148,6 +165,11 @@ html[data-theme="dark"] .ad-slot__label {
     );
   border: 1.5px dashed #cbd5e1;
   isolation: isolate;
+  /* Skip painting ad slots that aren't on screen — saves layout/paint work
+     during scroll, especially on long article pages with sidebar + in-article
+     + bottom slots. min-height seeds the contain-intrinsic-size hint. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--ad-min-h);
 }
 .ad-slot__inner {
   position: absolute;
@@ -175,7 +197,7 @@ html[data-theme="dark"] .ad-slot__label {
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 9999px;
-  background: #D21F2A;
+  background: rgb(var(--brand-rgb));
 }
 .ad-slot__tag {
   position: absolute;

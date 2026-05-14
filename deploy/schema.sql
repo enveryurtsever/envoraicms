@@ -179,9 +179,9 @@ CREATE TABLE IF NOT EXISTS "Themes" (
   "CreatedDate"   TIMESTAMP DEFAULT NOW()
 );
 INSERT INTO "Themes" ("ThemeSlug", "ThemeName", "ThemeDesc", "SupportsDark") VALUES
-  ('classic',  'Classic',  'Varsayılan hero + grid',              TRUE),
-  ('magazine', 'Magazine', '2 kolonlu büyük kapak + yan sidebar', TRUE),
-  ('minimal',  'Minimal',  'Tek kolon yalın liste',               TRUE)
+  ('classic',  'Editorial Grid', 'Hero carousel up top, then category duos, hot-now strip, and tall-feature columns.', TRUE),
+  ('magazine', 'Cover Mosaic',   'Three-column overlay mosaic with a dominant cover; image-driven feel.',              TRUE),
+  ('minimal',  'Broadsheet',     'Top headline strip, big lead with sidebar list, then dense category columns.',       TRUE)
 ON CONFLICT ("ThemeSlug") DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS "IngestRuns" (
@@ -366,5 +366,12 @@ CREATE INDEX IF NOT EXISTS "idx_contents_author"
 -- Mirrors deploy/migrations/010_menu_toggles.sql.
 ALTER TABLE "Settings" ADD COLUMN IF NOT EXISTS "ShowHeaderMenu" BOOLEAN DEFAULT TRUE;
 ALTER TABLE "Settings" ADD COLUMN IF NOT EXISTS "ShowFooterMenu" BOOLEAN DEFAULT TRUE;
+
+-- Mirrors deploy/migrations/014_brand_colors.sql.
+ALTER TABLE "Settings" ADD COLUMN IF NOT EXISTS "PrimaryColor"   TEXT;
+ALTER TABLE "Settings" ADD COLUMN IF NOT EXISTS "SecondaryColor" TEXT;
+
+-- Mirrors deploy/migrations/015_site_language.sql.
+ALTER TABLE "Settings" ADD COLUMN IF NOT EXISTS "SiteLanguage" TEXT DEFAULT 'en';
 
 COMMIT;

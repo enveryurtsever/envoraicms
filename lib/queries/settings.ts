@@ -23,10 +23,13 @@ const load = unstable_cache(
              "MetaAuthor",
              COALESCE("MetaRobots", 'index,follow') AS "MetaRobots",
              "FK_ThemeID",
+             "PrimaryColor", "SecondaryColor",
+             COALESCE("SiteLanguage", 'en') AS "SiteLanguage",
              COALESCE("DefaultColorMode", 'light') AS "DefaultColorMode",
              COALESCE("AllowColorToggle", TRUE) AS "AllowColorToggle",
              COALESCE("ShowHeaderMenu", TRUE)   AS "ShowHeaderMenu",
              COALESCE("ShowFooterMenu", TRUE)   AS "ShowFooterMenu",
+             COALESCE("ShowViewCounts", TRUE)   AS "ShowViewCounts",
              COALESCE("LlmsTxtEnabled", TRUE) AS "LlmsTxtEnabled",
              "LlmsTxtIntro",
              "AdsensePublisherID",
@@ -63,6 +66,17 @@ function safeParseArray(s: string): SocialLink[] {
   }
 }
 
+// Centralized fallback for editorial images (article hero, card grids, etc.).
+// Honors Settings.CoverImage when the operator uploaded one in admin; otherwise
+// falls back to the static placeholder shipped under public/. Cached with
+// React's cache() so repeated calls in the same request are free.
+const STATIC_COVER_FALLBACK = "/Upload/default-cover.jpg";
+export const getDefaultCover = cache(async (): Promise<string> => {
+  const s = await load();
+  const uploaded = s?.CoverImage?.trim();
+  return uploaded && uploaded.length > 0 ? uploaded : STATIC_COVER_FALLBACK;
+});
+
 export const getSettings = cache(async () => {
   const s = await load();
   if (!s) {
@@ -88,10 +102,14 @@ export const getSettings = cache(async () => {
       MetaAuthor: null,
       MetaRobots: "index,follow",
       FK_ThemeID: null,
+      PrimaryColor: null,
+      SecondaryColor: null,
+      SiteLanguage: "en",
       DefaultColorMode: "light",
       AllowColorToggle: true,
       ShowHeaderMenu: true,
       ShowFooterMenu: true,
+      ShowViewCounts: true,
       LlmsTxtEnabled: true,
       LlmsTxtIntro: null,
       SocialLinks: [],

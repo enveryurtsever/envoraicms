@@ -80,7 +80,8 @@ function parseSocialLinks(fd: FormData): SocialLink[] {
 }
 
 export async function saveSettings(formData: FormData): Promise<void> {
-  await requireRole(["admin", "editor"]);
+  // Admin-only: this action writes HeaderScripts (raw HTML rendered on every public page).
+  await requireRole(["admin"]);
 
   const uploadedLogo = await uploadIfPresent(formData, "SiteLogoFile", "logo");
   const uploadedCover = await uploadIfPresent(formData, "CoverImageFile", "cover");
@@ -92,6 +93,7 @@ export async function saveSettings(formData: FormData): Promise<void> {
     Keywords: str(formData, "Keywords"),
     SiteName: str(formData, "SiteName"),
     SiteUrl: str(formData, "SiteUrl"),
+    SiteLanguage: str(formData, "SiteLanguage") ?? "en",
     SiteLogo: uploadedLogo ?? str(formData, "SiteLogo"),
     Favicon: uploadedFavicon ?? str(formData, "Favicon"),
     CoverImage: uploadedCover ?? str(formData, "CoverImage"),
@@ -107,6 +109,7 @@ export async function saveSettings(formData: FormData): Promise<void> {
     AllowColorToggle: bool(formData, "AllowColorToggle"),
     ShowHeaderMenu: bool(formData, "ShowHeaderMenu"),
     ShowFooterMenu: bool(formData, "ShowFooterMenu"),
+    ShowViewCounts: bool(formData, "ShowViewCounts"),
     LlmsTxtEnabled: bool(formData, "LlmsTxtEnabled"),
     LlmsTxtIntro: str(formData, "LlmsTxtIntro"),
     FK_ThemeID: Number(formData.get("FK_ThemeID")) || null,
@@ -128,8 +131,8 @@ export async function saveSettings(formData: FormData): Promise<void> {
         "Favicon","CoverImage","ContentUrl","HeaderScripts","AdsEnabled",
         "BingVerification",
         "DefaultOgImage","TwitterHandle","MetaAuthor","MetaRobots",
-        "FK_ThemeID","DefaultColorMode","AllowColorToggle",
-        "ShowHeaderMenu","ShowFooterMenu",
+        "FK_ThemeID","SiteLanguage","DefaultColorMode","AllowColorToggle",
+        "ShowHeaderMenu","ShowFooterMenu","ShowViewCounts",
         "LlmsTxtEnabled","LlmsTxtIntro","SocialLinks",
         "MetaProvider","ContentProvider","TrendsProvider",
         "FK_LangID","CreatedDate"
@@ -140,8 +143,9 @@ export async function saveSettings(formData: FormData): Promise<void> {
         ${data.HeaderScripts}, ${data.AdsEnabled},
         ${data.BingVerification}, ${data.DefaultOgImage}, ${data.TwitterHandle},
         ${data.MetaAuthor}, ${data.MetaRobots},
-        ${data.FK_ThemeID}, ${data.DefaultColorMode}, ${data.AllowColorToggle},
-        ${data.ShowHeaderMenu}, ${data.ShowFooterMenu},
+        ${data.FK_ThemeID}, ${data.SiteLanguage},
+        ${data.DefaultColorMode}, ${data.AllowColorToggle},
+        ${data.ShowHeaderMenu}, ${data.ShowFooterMenu}, ${data.ShowViewCounts},
         ${data.LlmsTxtEnabled}, ${data.LlmsTxtIntro}, ${sql.json(social)},
         ${data.MetaProvider}, ${data.ContentProvider}, ${data.TrendsProvider},
         1, NOW()
@@ -167,10 +171,12 @@ export async function saveSettings(formData: FormData): Promise<void> {
         "MetaAuthor"         = ${data.MetaAuthor},
         "MetaRobots"         = ${data.MetaRobots},
         "FK_ThemeID"         = ${data.FK_ThemeID},
+        "SiteLanguage"       = ${data.SiteLanguage},
         "DefaultColorMode"   = ${data.DefaultColorMode},
         "AllowColorToggle"   = ${data.AllowColorToggle},
         "ShowHeaderMenu"     = ${data.ShowHeaderMenu},
         "ShowFooterMenu"     = ${data.ShowFooterMenu},
+        "ShowViewCounts"     = ${data.ShowViewCounts},
         "LlmsTxtEnabled"     = ${data.LlmsTxtEnabled},
         "LlmsTxtIntro"       = ${data.LlmsTxtIntro},
         "SocialLinks"        = ${sql.json(social)},

@@ -4,7 +4,11 @@ import { revalidateTag } from "next/cache";
 import { sql } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { parseServiceAccount } from "@/lib/indexing/google";
-import { submitIndexingForContent, buildContentUrl } from "@/lib/indexing/submit";
+import {
+  submitIndexingForContent,
+  buildContentUrl,
+} from "@/lib/indexing/submit";
+import { getAdminContentById } from "@/lib/queries/admin-contents";
 
 function str(fd: FormData, k: string, max = 20000): string {
   const v = fd.get(k);
@@ -52,9 +56,14 @@ export async function submitManualAction(fd: FormData): Promise<void> {
   if (!slug || !Number.isFinite(contentId)) {
     throw new Error("Content ID and slug are required.");
   }
-  const url = await buildContentUrl(slug);
+  const row = await getAdminContentById(contentId);
+  if (!row?.CatSeo) {
+    throw new Error("Could not resolve the article's category.");
+  }
+  const url = await buildContentUrl(row.CatSeo, slug);
   const r = await submitIndexingForContent(contentId, url, type);
   if (!r.ok) {
     throw new Error(r.message ?? "Submission failed.");
   }
 }
+

@@ -7,6 +7,7 @@ import type { Settings, Theme } from "@/lib/types";
 import { Tabs } from "@/components/admin-ui/Tabs";
 import { useToast } from "@/components/admin-ui/Toast";
 import { AIInputRow } from "@/components/admin-ui/AIWand";
+import { SITE_LANGUAGES } from "@/lib/site-language";
 import { saveSettings } from "./actions";
 import { SocialLinksField } from "./SocialLinksField";
 
@@ -106,6 +107,26 @@ function GeneralTab({ settings }: { settings: Settings }) {
       <h3>General</h3>
       <Row label="Site name" name="SiteName" value={settings.SiteName} placeholder="Envoraicms" />
       <Row label="Site URL" name="SiteUrl" value={settings.SiteUrl} placeholder="https://example.com" hint="Public root URL of the site." />
+      <div className="form-row">
+        <label htmlFor="SiteLanguage">Site language</label>
+        <div>
+          <select
+            id="SiteLanguage"
+            name="SiteLanguage"
+            defaultValue={settings.SiteLanguage ?? "en"}
+          >
+            {SITE_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label} ({l.code})
+              </option>
+            ))}
+          </select>
+          <small>
+            Drives <code>&lt;html lang&gt;</code>, JSON-LD <code>inLanguage</code>,
+            OpenGraph <code>og:locale</code>, and the news sitemap language tag.
+          </small>
+        </div>
+      </div>
       <AIInputRow
         label="Site title"
         name="Title"
@@ -154,7 +175,7 @@ function GeneralTab({ settings }: { settings: Settings }) {
         value={settings.CoverImage}
         hint="Used for articles without an image and as the OG fallback."
       />
-      <Row label="Content CDN URL" name="ContentUrl" value={settings.ContentUrl} hint="Optional CDN base for /Content/ assets." />
+      <Row label="Content CDN URL" name="ContentUrl" value={settings.ContentUrl} hint="Optional CDN base for /Upload/content/ assets." />
       <Row
         label="Ads enabled"
         name="AdsEnabled"
@@ -237,6 +258,13 @@ function ThemeTab({ settings, themes }: { settings: Settings; themes: Theme[] })
         type="switch"
         checked={settings.ShowFooterMenu}
         hint="Master switch for the categories + pages section in the footer. Off → only the brand strip remains."
+      />
+      <Row
+        label="View counts"
+        name="ShowViewCounts"
+        type="switch"
+        checked={settings.ShowViewCounts}
+        hint="Show read counts on article headers and the Popular sidebar. Off → counts are hidden site-wide (still tracked)."
       />
     </div>
   );

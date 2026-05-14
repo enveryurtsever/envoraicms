@@ -47,7 +47,12 @@ export function IndexingClient({
             id: "configuration",
             label: "Configuration",
             hint: "Service account & toggle",
-            content: <ConfigurationTab settings={settings} saEmail={saEmail} />,
+            content: (
+              <ConfigurationTab
+                settings={settings}
+                saEmail={saEmail}
+              />
+            ),
           },
           {
             id: "manual",
@@ -91,54 +96,147 @@ function ConfigurationTab({
   }
 
   return (
-    <form action={handleSubmit} autoComplete="off">
-      <div className="card">
-        <h3>Service account &amp; auto-submit</h3>
-        <div className="form-row">
-          <label htmlFor="IndexingEnabled">Automatic indexing</label>
-          <div>
-            <label style={{ fontWeight: 400, padding: 0, display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-              <input
-                id="IndexingEnabled"
-                type="checkbox"
-                name="IndexingEnabled"
-                defaultChecked={settings.IndexingEnabled}
-                className="switch"
+    <>
+      <SetupGuideCard siteUrl={settings.SiteUrl} />
+
+      <form action={handleSubmit} autoComplete="off">
+        <div className="card">
+          <h3>Service account &amp; auto-submit</h3>
+          <div className="form-row">
+            <label htmlFor="IndexingEnabled">Automatic indexing</label>
+            <div>
+              <label style={{ fontWeight: 400, padding: 0, display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                <input
+                  id="IndexingEnabled"
+                  type="checkbox"
+                  name="IndexingEnabled"
+                  defaultChecked={settings.IndexingEnabled}
+                  className="switch"
+                />
+                Send automatic URL notifications for new / updated content
+              </label>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <label htmlFor="IndexingServiceAccountJSON">Service account JSON</label>
+            <div>
+              <textarea
+                id="IndexingServiceAccountJSON"
+                name="IndexingServiceAccountJSON"
+                defaultValue={settings.IndexingServiceAccountJSON ?? ""}
+                rows={12}
+                style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.78rem" }}
+                placeholder='{ "type": "service_account", "client_email": "...", "private_key": "-----BEGIN PRIVATE KEY-----..." }'
               />
-              Send automatic URL notifications for new / updated content
-            </label>
+              <small>
+                Google Cloud Indexing API service account JSON. You must add this account to
+                Search Console as an <strong>owner</strong>. Stored unencrypted; only the{" "}
+                <em>admin</em> role can view or edit it.
+                {saEmail ? (
+                  <> Currently saved as <code>{saEmail}</code>.</>
+                ) : null}
+              </small>
+            </div>
+          </div>
+
+          <div style={{ textAlign: "right" }}>
+            <button type="submit" className="btn" disabled={pending}>
+              {pending ? "Saving…" : "Save changes"}
+            </button>
           </div>
         </div>
+      </form>
 
-        <div className="form-row">
-          <label htmlFor="IndexingServiceAccountJSON">Service account JSON</label>
-          <div>
-            <textarea
-              id="IndexingServiceAccountJSON"
-              name="IndexingServiceAccountJSON"
-              defaultValue={settings.IndexingServiceAccountJSON ?? ""}
-              rows={12}
-              style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.78rem" }}
-              placeholder='{ "type": "service_account", "client_email": "...", "private_key": "-----BEGIN PRIVATE KEY-----..." }'
-            />
-            <small>
-              Google Cloud Indexing API service account JSON. You must add this account to
-              Search Console as an <strong>owner</strong>. Stored unencrypted; only the{" "}
-              <em>admin</em> role can view or edit it.
-              {saEmail ? (
-                <> Currently saved as <code>{saEmail}</code>.</>
-              ) : null}
-            </small>
-          </div>
-        </div>
+      <SitemapCard siteUrl={settings.SiteUrl} />
+    </>
+  );
+}
 
-        <div style={{ textAlign: "right" }}>
-          <button type="submit" className="btn" disabled={pending}>
-            {pending ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      </div>
-    </form>
+function SetupGuideCard({ siteUrl }: { siteUrl: string }) {
+  const base = (siteUrl ?? "").replace(/\/$/, "");
+  return (
+    <div
+      className="card"
+      style={{ background: "#f0f9ff", borderColor: "#bae6fd" }}
+    >
+      <h3 style={{ marginTop: 0 }}>How to enable automatic indexing</h3>
+      <ol style={{ paddingLeft: "1.25rem", margin: "0.5rem 0 0", fontSize: "0.88rem", lineHeight: 1.65 }}>
+        <li>
+          Go to{" "}
+          <a
+            href="https://search.google.com/search-console"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Google Search Console
+          </a>{" "}
+          and verify <code>{base || "your site URL"}</code> as a property (URL prefix
+          or Domain).
+        </li>
+        <li>
+          In{" "}
+          <a
+            href="https://console.cloud.google.com/apis/library/indexing.googleapis.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Google Cloud Console
+          </a>{" "}
+          create a project and <strong>enable the Web Search Indexing API</strong>.
+        </li>
+        <li>
+          Under <em>IAM &amp; Admin → Service Accounts</em>, create a new service
+          account and download its JSON key.
+        </li>
+        <li>
+          Back in Search Console, open <em>Settings → Users and permissions</em>{" "}
+          and add the service account email as an <strong>Owner</strong>.
+        </li>
+        <li>
+          Paste the full JSON below, tick <em>Automatic indexing</em>, and save.
+          Every publish/update will now be pushed to Google automatically (200
+          URLs / day free quota).
+        </li>
+      </ol>
+    </div>
+  );
+}
+
+function SitemapCard({ siteUrl }: { siteUrl: string }) {
+  const base = (siteUrl ?? "").replace(/\/$/, "");
+  const sitemapUrl = `${base || "https://your-domain"}/sitemap.xml`;
+  return (
+    <div className="card">
+      <h3>Sitemap submission (manual)</h3>
+      <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 0 }}>
+        The site exposes a single sitemap at <code>/sitemap.xml</code> that
+        covers every URL and embeds Google News markup for articles published in
+        the last 48 hours. Submit it once to Google Search Console &mdash;
+        Google polls it on its own afterwards.
+      </p>
+      <ol style={{ paddingLeft: "1.25rem", fontSize: "0.85rem", lineHeight: 1.65, color: "#374151" }}>
+        <li>
+          Open the{" "}
+          <a
+            href={`https://search.google.com/search-console/sitemaps?resource_id=${encodeURIComponent(base)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Sitemaps section of Search Console
+          </a>
+          .
+        </li>
+        <li>
+          Under <em>Add a new sitemap</em>, paste:{" "}
+          <code>{sitemapUrl}</code>
+        </li>
+        <li>
+          Click <strong>Submit</strong>. Status should change to{" "}
+          <em>Success</em> within a few minutes.
+        </li>
+      </ol>
+    </div>
   );
 }
 
@@ -168,7 +266,9 @@ function ManualTab() {
         <h3>Manual submit</h3>
         <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 0 }}>
           Send a single URL to the Indexing API. The full URL is built from{" "}
-          <code>SiteUrl</code> + <code>/s/&lt;slug&gt;</code>.
+          <code>SiteUrl</code> + <code>/&lt;category&gt;/&lt;slug&gt;</code>{" "}
+          (the article&apos;s category is resolved automatically from the
+          Content ID).
         </p>
         <div className="form-row">
           <label htmlFor="contentId">Content ID</label>

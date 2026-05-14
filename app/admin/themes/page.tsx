@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { listThemes, getActiveThemeSlug } from "@/lib/queries/themes";
+import { getSettings } from "@/lib/queries/settings";
 import { CardSkeleton } from "@/components/admin-ui/Skeletons";
 import { ThemesClient } from "./ThemesClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Themes" };
 
 export default function ThemesPage() {
   return (
@@ -36,9 +37,17 @@ export default function ThemesPage() {
 }
 
 async function ThemesData() {
-  const [themes, activeSlug] = await Promise.all([
+  const [themes, activeSlug, settings] = await Promise.all([
     listThemes(),
     getActiveThemeSlug(),
+    getSettings(),
   ]);
-  return <ThemesClient themes={themes} activeSlug={activeSlug} />;
+  return (
+    <ThemesClient
+      themes={themes}
+      activeSlug={activeSlug}
+      primaryColor={settings.PrimaryColor}
+      secondaryColor={settings.SecondaryColor}
+    />
+  );
 }

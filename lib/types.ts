@@ -28,10 +28,14 @@ export type Settings = {
   MetaAuthor: string | null;
   MetaRobots: string | null;
   FK_ThemeID: number | null;
+  PrimaryColor: string | null;
+  SecondaryColor: string | null;
+  SiteLanguage: string | null;
   DefaultColorMode: "light" | "dark" | "system" | null;
   AllowColorToggle: boolean;
   ShowHeaderMenu: boolean;
   ShowFooterMenu: boolean;
+  ShowViewCounts: boolean;
   LlmsTxtEnabled: boolean;
   LlmsTxtIntro: string | null;
   SocialLinks: SocialLink[];
@@ -87,12 +91,17 @@ export type CronJobConfig = {
   page?: number;           // pagination cursor (default 1)
 
   // Article pipeline (SerpAPI + multi-provider AI)
-  seedQuery?: string;            // "AI productivity tools"
-  targetCatId?: number;          // site category to file articles under
+  routerMode?: boolean;          // true = seed/route trends across all active categories
+  seedQuery?: string;            // single-cat mode only: "AI productivity tools"
+  targetCatId?: number;          // single-cat mode only: site category to file under
+  maxCategoriesPerTick?: number; // router mode: cap on categories hit per refill (SerpAPI quota)
+  perCategoryTrendLimit?: number;// router mode: trends to fetch per category (default 8)
   ideationBatchCount?: number;   // how many drafts to ideate per refill (10/20/30)
   trendsLocation?: string;       // ISO-2 country for SerpAPI
   trendsLanguage?: string;       // ISO-2 language for SerpAPI
+  trendsWindow?: string;         // SerpAPI date enum (default "now 7-d")
   autoRefill?: boolean;          // when pending=0, auto-trigger ideation
+  publishStaggerMinutes?: number;// gap between publish dates of articles inserted in the same tick (default 15)
   guidance?: string;             // optional tone/angle for the meta AI
 
   [key: string]: unknown;
@@ -255,4 +264,4 @@ export type ContentListItem = Pick<
   | "ContentImage"
   | "ContentSeo"
   | "PublishDate"
-> & { CatSeo: string; CatName: string };
+> & { CatSeo: string; CatName: string; ViewCount?: number };

@@ -7,6 +7,7 @@ import type { Content, ContentListItem } from "@/lib/types";
 const LIST_COLS = sql`
   c."ContentID", c."FK_CatID", c."ContentTitle", c."ContentShort",
   c."ContentDesc", c."ContentImage", c."ContentSeo", c."PublishDate",
+  COALESCE(c."ViewCount", 0)::int AS "ViewCount",
   cat."CatSeo", cat."CatName"
 `;
 
@@ -72,6 +73,7 @@ export const getPerCategoryLatest = cache(
       SELECT
         c."ContentID", c."FK_CatID", c."ContentTitle", c."ContentShort",
         c."ContentDesc", c."ContentImage", c."ContentSeo", c."PublishDate",
+        COALESCE(c."ViewCount", 0)::int AS "ViewCount",
         cat."CatSeo", cat."CatName",
         cat."CatID" AS "_CatID", cat."CatNumber" AS "_CatNumber"
       FROM "Categories" cat
@@ -106,11 +108,53 @@ export const getPerCategoryLatest = cache(
         ContentImage: r.ContentImage,
         ContentSeo: r.ContentSeo,
         PublishDate: r.PublishDate,
+        ViewCount: r.ViewCount,
         CatSeo: r.CatSeo,
         CatName: r.CatName,
       });
     }
     return [...groups.values()];
+  }
+);
+
+export const listByAuthorId = cache(
+  async (
+    authorId: number,
+    { limit = 20, offset = 0 }: { limit?: number; offset?: number } = {}
+  ): Promise<ContentListItem[]> => {
+    const loader = unstable_cache(
+      async () =>
+        sql<ContentListItem[]>`
+          SELECT ${LIST_COLS}
+          ${LIST_JOIN}
+            AND c."FK_AuthorID" = ${authorId}
+          ORDER BY c."PublishDate" DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `,
+      ["contents:author", String(authorId), String(limit), String(offset)],
+      { revalidate: 120, tags: ["contents", `author:${authorId}`] }
+    );
+    return loader();
+  }
+);
+
+export const countByAuthorId = cache(
+  async (authorId: number): Promise<number> => {
+    const loader = unstable_cache(
+      async () => {
+        const rows = await sql<{ count: string }[]>`
+          SELECT COUNT(*)::text AS count
+          FROM "Contents" c
+          WHERE c."FK_AuthorID" = ${authorId}
+            AND c."IsActive" = true
+            AND c."IsDeleted" = false
+        `;
+        return Number(rows[0]?.count ?? 0);
+      },
+      ["contents:author:count", String(authorId)],
+      { revalidate: 300, tags: ["contents", `author:${authorId}`] }
+    );
+    return loader();
   }
 );
 
@@ -206,16 +250,34 @@ export const getRelated = cache(
 
 export const searchContents = cache(
   async (q: string, { limit = 24, offset = 0 }: { limit?: number; offset?: number } = {}) => {
-    const pattern = `%${q.replace(/[%_]/g, "\\$&")}%`;
+    // /search/ URLs are hyphenated slugs ("aging-research") — turn dashes into
+    // spaces so the user's intent reaches websearch_to_tsquery as separate terms.
+    const normalized = q.includes("-") && !q.includes(" ")
+      ? q.replace(/-/g, " ")
+      : q;
+    // Backed by idx_contents_fts (GIN tsvector). websearch_to_tsquery accepts
+    // user-style input ("foo bar", quoted phrases, OR) without throwing on
+    // punctuation, unlike to_tsquery.
     return sql<ContentListItem[]>`
       SELECT ${LIST_COLS}
       ${LIST_JOIN}
-        AND (
-          c."ContentTitle" ILIKE ${pattern}
-          OR c."ContentDesc" ILIKE ${pattern}
-          OR c."ContentKeywords" ILIKE ${pattern}
-        )
-      ORDER BY c."PublishDate" DESC
+        AND to_tsvector(
+              'english',
+              coalesce(c."ContentTitle",'') || ' ' ||
+              coalesce(c."ContentDesc",'') || ' ' ||
+              coalesce(c."ContentKeywords",'')
+            ) @@ websearch_to_tsquery('english', ${normalized})
+      ORDER BY
+        ts_rank(
+          to_tsvector(
+            'english',
+            coalesce(c."ContentTitle",'') || ' ' ||
+            coalesce(c."ContentDesc",'') || ' ' ||
+            coalesce(c."ContentKeywords",'')
+          ),
+          websearch_to_tsquery('english', ${normalized})
+        ) DESC,
+        c."PublishDate" DESC
       LIMIT ${limit} OFFSET ${offset}
     `;
   }
@@ -286,19 +348,6 @@ export const countSitemapContents = cache(async (): Promise<number> => {
   return rows[0]?.c ?? 0;
 });
 
-export const getNewsSitemapContents = cache(async (): Promise<SitemapContent[]> => {
-  return sql<SitemapContent[]>`
-    SELECT c."ContentSeo", cat."CatSeo", c."PublishDate",
-           c."ModifiedDate", c."ContentImage", c."ContentTitle"
-    FROM "Contents" c
-    JOIN "Categories" cat ON cat."CatID" = c."FK_CatID"
-    WHERE c."IsActive" = true AND c."IsDeleted" = false
-      AND cat."IsActive" = true AND cat."IsDeleted" = false
-      AND c."PublishDate" >= NOW() - INTERVAL '2 days'
-    ORDER BY c."PublishDate" DESC
-    LIMIT 1000
-  `;
-});
 
 export const getTrendingContentIds = cache(
   async (): Promise<{ ContentSeo: string; CatSeo: string }[]> => {
