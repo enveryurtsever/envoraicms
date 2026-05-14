@@ -153,10 +153,16 @@ async function computeDashboardStats(range: DateRange, tz: string): Promise<Dash
       ORDER BY r."StartedAt" DESC
       LIMIT 10
     `,
+    // Count actual `[falai]` occurrences across each run's Log (one tag per
+    // successful image), not just "runs that mention falai" — otherwise a
+    // run that produced 20 images was being scored as 1.
     sql<{ c: number }[]>`
-      SELECT COUNT(*)::int AS c FROM "IngestRuns"
+      SELECT COALESCE(SUM(
+        (LENGTH("Log") - LENGTH(REPLACE("Log", '[falai]', '')))
+        / LENGTH('[falai]')
+      ), 0)::int AS c
+      FROM "IngestRuns"
       WHERE "StartedAt" >= ${since}
-        AND "Log" ILIKE '%[falai]%'
     `,
     sql<{ CronID: number; JobName: string; NextRunAt: string | null }[]>`
       SELECT "CronID", "JobName", "NextRunAt"::text AS "NextRunAt"

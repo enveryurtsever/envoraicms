@@ -90,6 +90,7 @@ export async function expandArticleDraft(args: {
         slug,
         fallbackThumbnail: null,
       });
+      log.push(`[draft#${draft.DraftID}] [falai] generated image`);
     } catch (err) {
       log.push(
         `[draft#${draft.DraftID}] fal.ai failed: ${
