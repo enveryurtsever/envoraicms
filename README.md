@@ -10,6 +10,7 @@ WordPress-style install: enter DB credentials, run the migrations, finish the `/
 
 ## Why Envoraicms
 
+- **Fully automated, end-to-end.** Set up the cron jobs once and the system finds trending topics, drafts articles, writes the bodies, generates cover images, publishes them, pings Google Search Console, and emits structured data — all without a human in the loop. Editorial oversight is optional, not required.
 - **AI-native, not AI-bolted-on.** A configurable ingest pipeline turns trending queries into article drafts and expands them into publish-ready HTML. Pick Gemini, OpenAI, or Anthropic per role (meta vs. content).
 - **WordPress-style ops.** One installer, an admin panel for everything, no `wp-config.php` analogue. The database is the source of truth.
 - **SEO out of the box.** Per-page metadata, OpenGraph + Twitter cards, `NewsArticle` / `BreadcrumbList` / `WebSite` / `Organization` JSON-LD, ImageObject dimensions, `citation` from upstream sources, speakable selectors — all without plugins.
@@ -17,7 +18,92 @@ WordPress-style install: enter DB credentials, run the migrations, finish the `/
 - **One sitemap.** `/sitemap.xml` covers pages + categories + articles + Google News markup for the last 48 hours.
 - **Modern stack.** Next.js 15 App Router, React 19, server components, TypeScript end-to-end, no ORM bloat.
 
+## How the automation works
+
+```
+            ┌───────────────────────────────────────────────────┐
+            │  In-process scheduler (every 60s, no external cron) │
+            └─────────────────────────┬─────────────────────────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        ▼                             ▼                             ▼
+  ┌───────────┐               ┌───────────────┐             ┌──────────────┐
+  │  Trends   │               │  News fetch   │             │   Drafts     │
+  │ (SerpAPI) │               │  (NewsNow)    │             │  queue tick  │
+  └─────┬─────┘               └───────┬───────┘             └──────┬───────┘
+        │                             │                            │
+        ▼                             ▼                            ▼
+  ┌────────────────────────────────────────────────────────────────────┐
+  │  Meta AI (Gemini / OpenAI / Anthropic) — title, summary, keywords,  │
+  │  image prompt; one draft row per topic                              │
+  └────────────────────────────┬───────────────────────────────────────┘
+                               ▼
+  ┌────────────────────────────────────────────────────────────────────┐
+  │  Content AI (Gemini / OpenAI / Anthropic) — 700–1000 word HTML body │
+  └────────────────────────────┬───────────────────────────────────────┘
+                               ▼
+  ┌────────────────────────────────────────────────────────────────────┐
+  │  Image AI (fal.ai) — cover image generated from the meta prompt;    │
+  │  saved through sharp into /public/Upload/content/                   │
+  └────────────────────────────┬───────────────────────────────────────┘
+                               ▼
+  ┌────────────────────────────────────────────────────────────────────┐
+  │  Publish — Content row + author + category, SEO JSON-LD,            │
+  │  Indexing API call to Google Search Console                         │
+  └────────────────────────────────────────────────────────────────────┘
+```
+
+Every step is observable in the admin (`/admin/drafts`, `/admin/cronjobs`, `/admin/indexing`, `/admin/logs`) and overridable per cron job: trend window, ideation batch size, publish staggering, per-category quotas, even the prompt templates.
+
+## External APIs / integrations
+
+All credentials live in the **API Keys** screen in the admin (or for Google services, in **Google Kit** / **Indexing**). The system runs in degraded but still-useful modes when any of these are missing — for example, without an image provider the pipeline reuses upstream images; without SerpAPI it falls back to NewsNow trending topics.
+
+### AI providers (pick one per role)
+
+| Provider | Role | Used for | Notes |
+|---|---|---|---|
+| **[Google Gemini](https://ai.google.dev/)** | Meta AI / Content AI | Article titles, summaries, keywords, image prompts, full HTML body | Default choice; cheapest |
+| **[OpenAI](https://platform.openai.com/)** | Meta AI / Content AI | Same as above | GPT-4/4o family |
+| **[Anthropic Claude](https://www.anthropic.com/api)** | Meta AI / Content AI | Same as above | Claude 3.5 / 3.7 / 4.x family |
+| **[fal.ai](https://fal.ai/)** | Image AI | Cover image generation from prompts | Optional — pipeline runs without it |
+
+### Trend / news sources
+
+| Provider | Used for | Notes |
+|---|---|---|
+| **[SerpAPI](https://serpapi.com/)** | Google Trends queries — the seed for article ideation | 100 free searches/month; primary trend source |
+| **[NewsNow](https://newsnow.io/)** | News article ingest pipeline (separate from the AI pipeline) | Pulls existing news stories instead of generating from scratch |
+
+### Google services (admin-managed in `/admin/googlekit` and `/admin/indexing`)
+
+| Service | Used for | Required? |
+|---|---|---|
+| **[Google Search Console Indexing API](https://developers.google.com/search/apis/indexing-api)** | Push new / updated URLs to Google immediately on publish | Optional but recommended (200 URLs/day free) |
+| **[Google Analytics 4](https://analytics.google.com/)** | Visitor analytics via `gtag` | Optional |
+| **[Google Tag Manager](https://tagmanager.google.com/)** | Tag management container | Optional |
+| **[Google Search Console](https://search.google.com/search-console)** | Site verification via meta tag | Optional |
+| **[Google AdSense](https://www.google.com/adsense/)** | Display ads (manual slots or Auto Ads) | Optional |
+
+### Self-hosted / no third party
+
+- **PostgreSQL** — your own
+- **Sharp** — runs locally for image processing
+- **Sitemap, RSS, robots.txt, llms.txt** — generated by the app, no external service
+- **Session cookies + auth** — handled in-process, no Auth0 / Clerk / etc.
+
+You can run a useful site with just a Postgres DB + one AI provider key (Gemini's free tier is enough to test). Everything else is incremental.
+
 ## Features
+
+### Automation
+- Fully automated ingest → ideate → expand → image → publish pipeline; runs hands-free once cron jobs are configured
+- Two parallel pipelines: AI-generated articles (SerpAPI + multi-provider AI) and news rewrites (NewsNow + AI)
+- Router mode: distribute trend queries across all active categories with per-category quotas
+- Single-category mode: pin a topic + target category for focused publishing
+- Configurable publish staggering, batch sizes, trend windows, language / location, prompt templates
+- Auto-refill: when the draft queue empties, ideation kicks off on its own
+- Optional auto-submit to Google Search Console Indexing API on every publish
 
 ### Editorial
 - Article CRUD with rich-text editor and AI-assisted meta fields (title, summary, keywords, image prompt)
