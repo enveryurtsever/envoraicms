@@ -4,6 +4,7 @@ import { verifyPassword } from "@/lib/auth/password";
 import { setSession, getSession } from "@/lib/auth/session";
 import { updateLastLogin } from "@/lib/queries/users";
 import { logAudit } from "@/lib/audit";
+import { getClientIp, isIpLocked, recordLoginAttempt } from "@/lib/auth/login-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +18,25 @@ async function loginAction(formData: FormData) {
     redirect("/admin/login?error=missing");
   }
 
+  const ip = await getClientIp();
+  const lock = await isIpLocked(ip);
+  if (lock.locked) {
+    const mins = Math.max(1, Math.ceil(lock.retryAfterSec / 60));
+    redirect(`/admin/login?error=locked&mins=${mins}`);
+  }
+
   const user = await getUserByEmail(email);
   if (!user || !user.IsActive) {
+    await recordLoginAttempt(ip, email || null, false);
     redirect("/admin/login?error=invalid");
   }
   const ok = await verifyPassword(password, user.PasswordHash);
   if (!ok) {
+    await recordLoginAttempt(ip, email, false);
     redirect("/admin/login?error=invalid");
   }
 
+  await recordLoginAttempt(ip, email, true);
   await setSession({
     uid: user.UserID,
     role: user.Role,
@@ -42,7 +53,7 @@ async function loginAction(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; mins?: string }>;
 }) {
   const sp = await searchParams;
   const existing = await getSession();
@@ -55,7 +66,9 @@ export default async function LoginPage({
         ? "This account is inactive or deleted."
         : sp.error === "missing"
           ? "Email and password are required."
-          : null;
+          : sp.error === "locked"
+            ? `Too many failed attempts. Try again in ~${Math.max(1, Number(sp.mins ?? "15"))} min.`
+            : null;
 
   return (
     <div className="login-page">

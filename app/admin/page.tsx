@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { getDashboardStats, isDateRange, RANGE_LABEL, type DateRange } from "@/lib/queries/stats";
 import { getPreflight } from "@/lib/queries/preflight";
@@ -59,6 +60,7 @@ export default async function DashboardPage({
 }) {
   const sp = await searchParams;
   const range: DateRange = isDateRange(sp.range) ? sp.range : "today";
+  const tz = (await cookies()).get("admin_tz")?.value ?? "UTC";
 
   return (
     <>
@@ -79,7 +81,7 @@ export default async function DashboardPage({
       </Suspense>
 
       <Suspense fallback={<TilesSkeleton />}>
-        <DashboardData range={range} />
+        <DashboardData range={range} tz={tz} />
       </Suspense>
     </>
   );
@@ -136,8 +138,8 @@ async function PreflightBanner() {
   );
 }
 
-async function DashboardData({ range }: { range: DateRange }) {
-  const stats = await getDashboardStats(range);
+async function DashboardData({ range, tz }: { range: DateRange; tz: string }) {
+  const stats = await getDashboardStats(range, tz);
   const rangeLabel = RANGE_LABEL[range];
 
   const values: Record<TileKey, number> = {

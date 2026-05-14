@@ -5,6 +5,7 @@ import { getUserById } from "@/lib/queries/users";
 import { ToastProvider } from "@/components/admin-ui/Toast";
 import { AdminHeader } from "@/components/admin-ui/AdminHeader";
 import { SidebarNav, type NavItem } from "@/components/admin-ui/SidebarNav";
+import { TimezoneCookie } from "@/components/admin-ui/TimezoneCookie";
 import "./admin.css";
 
 // Note: no `force-dynamic` here — getSession() reads cookies which already
@@ -59,6 +60,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <ToastProvider>
+      <TimezoneCookie />
       <div className="admin-shell" style={{ display: "flex" }}>
         <aside className="admin-sidebar">
           <div className="admin-brand">

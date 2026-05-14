@@ -1,6 +1,13 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { sql } from "@/lib/db";
+import {
+  normalizeTz,
+  startOfDayInTz,
+  startOfWeekInTz,
+  startOfMonthInTz,
+  startOfYearInTz,
+} from "@/lib/dates/tz";
 
 export type DateRange = "today" | "week" | "month" | "year";
 
@@ -15,31 +22,15 @@ export function isDateRange(v: unknown): v is DateRange {
   return v === "today" || v === "week" || v === "month" || v === "year";
 }
 
-// Calendar-based "since" timestamp for the given range, in the server's
-// timezone. We compute it in JS so the SQL can take it as a parameter and the
-// server knows exactly which moment is being filtered on.
-function rangeSince(range: DateRange): Date {
-  const d = new Date();
-  if (range === "today") {
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  if (range === "week") {
-    // ISO week — Monday start.
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() - (day - 1));
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  if (range === "month") {
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  // year
-  d.setMonth(0, 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
+// Calendar-based "since" timestamp for the given range, in the admin's
+// reported IANA timezone (eg. "Europe/Istanbul"). Returns a UTC `Date` since
+// the DB stores UTC; the moment represents 00:00 in the target tz.
+function rangeSince(range: DateRange, tz: string): Date {
+  const now = new Date();
+  if (range === "today") return startOfDayInTz(now, tz);
+  if (range === "week") return startOfWeekInTz(now, tz);
+  if (range === "month") return startOfMonthInTz(now, tz);
+  return startOfYearInTz(now, tz);
 }
 
 export type DashboardStats = {
@@ -75,18 +66,20 @@ export type DashboardStats = {
   }[];
 };
 
-/** Dashboard stats are cached for 60s. They're invalidated whenever any
+/** Dashboard stats are cached for 60s, keyed by (range, tz) so each admin's
+ *  local calendar gets its own bucket. Invalidated whenever any
  *  Contents/Categories/CronJobs/IngestRuns/AuditLogs row is touched (those
  *  domains revalidate their tags on every insert/update). */
 export async function getDashboardStats(
   range: DateRange = "today",
+  tz: string = "UTC",
 ): Promise<DashboardStats> {
-  return loadDashboardStats(range);
+  return loadDashboardStats(range, normalizeTz(tz));
 }
 
 const loadDashboardStats = unstable_cache(
-  async (range: DateRange): Promise<DashboardStats> => {
-    return computeDashboardStats(range);
+  async (range: DateRange, tz: string): Promise<DashboardStats> => {
+    return computeDashboardStats(range, tz);
   },
   ["dashboard-stats"],
   {
@@ -95,8 +88,8 @@ const loadDashboardStats = unstable_cache(
   },
 );
 
-async function computeDashboardStats(range: DateRange): Promise<DashboardStats> {
-  const since = rangeSince(range);
+async function computeDashboardStats(range: DateRange, tz: string): Promise<DashboardStats> {
+  const since = rangeSince(range, tz);
 
   const [
     contentTotals,
