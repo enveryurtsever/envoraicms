@@ -84,7 +84,7 @@ export function ThemesClient({
           />
         ))}
         {themes.length === 0 ? (
-          <div className="card">No themes registered. Did the migrations run?</div>
+          <div className="card">No themes registered. Did the schema run?</div>
         ) : null}
       </div>
     </>

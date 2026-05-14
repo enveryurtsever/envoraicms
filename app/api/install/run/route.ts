@@ -91,55 +91,15 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    // 1. Apply the full schema.sql
+    // 1. Apply the single source-of-truth schema. Idempotent — tables, indexes
+    //    and seed data all use IF NOT EXISTS / ON CONFLICT DO NOTHING, so the
+    //    install can be retried safely on error.
     const schemaPath = join(process.cwd(), "deploy", "schema.sql");
     const schemaSql = await readFile(schemaPath, "utf8");
     await sql.unsafe(stripTransactionStatements(schemaSql));
     addStep("Database schema created", true);
 
-    // 1b. Apply each migration in order (schema.sql is idempotent but
-    //     002_dynamic.sql may have minor diffs not in schema.sql).
-    try {
-      const migrationsDir = join(process.cwd(), "deploy", "migrations");
-      const { readdir } = await import("node:fs/promises");
-      const files = (await readdir(migrationsDir))
-        .filter((f) => f.endsWith(".sql"))
-        .sort();
-      for (const f of files) {
-        const content = await readFile(join(migrationsDir, f), "utf8");
-        try {
-          await sql.unsafe(stripTransactionStatements(content));
-        } catch (err) {
-          // IF NOT EXISTS is used so collisions are fine; raise only real errors
-          const m = err instanceof Error ? err.message : String(err);
-          if (!/already exists|duplicate/i.test(m)) {
-            throw err;
-          }
-        }
-      }
-      addStep("Migrations applied", true);
-    } catch (err) {
-      addStep(
-        "Migrations applied",
-        false,
-        err instanceof Error ? err.message : "unknown",
-      );
-      throw err;
-    }
-
-    // 1c. Performance indexes (homepage, category, slug, FTS).
-    try {
-      const indexesPath = join(process.cwd(), "deploy", "indexes.sql");
-      const indexesSql = await readFile(indexesPath, "utf8");
-      await sql.unsafe(stripTransactionStatements(indexesSql));
-      addStep("Performance indexes created", true);
-    } catch (err) {
-      const m = err instanceof Error ? err.message : String(err);
-      addStep("Performance indexes created", false, m);
-      throw err;
-    }
-
-    // 1d. Session secret. Var olan Settings'te varsa onu kullan (idempotent
+    // 1b. Session secret. Var olan Settings'te varsa onu kullan (idempotent
     // install); otherwise generate one. The runtime cache is refreshed so
     // the admin user created in the same request can sign in immediately.
     const existingSecretRow = await sql<{ SessionSecret: string | null }[]>`

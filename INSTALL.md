@@ -49,16 +49,16 @@ Create the database in Postgres:
 CREATE DATABASE envoraicms;
 ```
 
-### 3. Install dependencies + run migrations
+### 3. Install dependencies
 
 ```bash
 npm ci
-npm run migrate
 ```
 
-The `migrate` script first applies `deploy/schema.sql` (base tables) on a
-fresh DB, then `deploy/migrations/*.sql` in order — all idempotent and
-tracked in the `_migrations` table. An existing DB only picks up new ones.
+You don't need to create tables manually — the `/install` wizard runs
+`deploy/schema.sql` automatically on first boot. If you prefer a headless
+setup (CI / Docker), run `npm run migrate` to apply the schema before
+build; it executes the same SQL the wizard would.
 
 ### 4. Build + start
 
@@ -80,8 +80,17 @@ pm2 save
 ### 5. Run the /install wizard
 
 Open `http://<server>:<PORT>/install` in a browser (whatever `PORT` you set
-in `.env.local`). Enter admin user + site settings. After it finishes you
-land in `/admin`.
+in `.env.local`). The wizard will:
+
+1. Apply `deploy/schema.sql` — creates every table, index, and seeds the
+   three first-party themes and built-in ad zones.
+2. Generate a session signing secret (stored in `Settings.SessionSecret`).
+3. Insert the initial `Settings` row from the form.
+4. Seed the default AI prompt templates.
+5. Create your admin user.
+6. Add a placeholder `General` category so the homepage isn't empty.
+
+After it finishes you land in `/admin`.
 
 ### 6. (Optional) Cron
 
@@ -146,8 +155,7 @@ app/                Next 15 App Router
 components/         Shared React components
 lib/                Server-side logic (DB, ingest pipeline, queries)
 themes/             Homepage templates (classic / magazine / minimal)
-deploy/migrations/  Sequential SQL migrations
-deploy/schema.sql   One-shot schema for fresh installs
+deploy/schema.sql   Single source-of-truth DB schema (idempotent)
 public/Upload/      Uploaded media (everything except default-cover.jpg
                     is DB-bound user content)
 scripts/            tsx-run tools (migrate, seed, runner)

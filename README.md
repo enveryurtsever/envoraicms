@@ -160,15 +160,14 @@ cp .env.example .env.local
 # 3. Create the DB
 createdb envoraicms
 
-# 4. Install + migrate
+# 4. Install
 npm ci
-npm run migrate
 
 # 5. Build + start
 npm run build
 npm run start
 
-# 6. Open the installer
+# 6. Open the installer — it creates every table for you
 # → http://localhost:3002/install
 ```
 
@@ -225,13 +224,12 @@ themes/
 └── shared/              shared blocks used by every theme
 
 deploy/
-├── schema.sql           full base schema (idempotent)
-├── migrations/          ordered, idempotent migrations
+├── schema.sql           single source-of-truth DB schema (idempotent)
 ├── nginx.conf           example reverse-proxy config
 └── ecosystem.config.js  example PM2 config
 
 scripts/
-├── migrate.ts           applies schema.sql + migrations/*.sql in order
+├── migrate.ts           applies deploy/schema.sql (same as the wizard does on boot)
 ├── seed-admin.ts        creates an admin user from CLI
 └── ingest-runner.ts     manually trigger a cron pass
 ```
@@ -260,15 +258,24 @@ npm run build             # production build
 npm run start             # production server
 npm run typecheck         # tsc --noEmit
 npm run lint              # next lint
-npm run migrate           # schema.sql + migrations/*.sql
+npm run migrate           # apply deploy/schema.sql (for headless / scripted deploys)
 npm run seed:admin        # interactive admin user creation
 npm run seed:authors      # seed sample authors
 npm run ingest:runner     # one-shot cron tick (article + news pipelines)
 ```
 
-## Database migrations
+## Database schema
 
-Migrations live in `deploy/migrations/` and run in filename order. `npm run migrate` applies `deploy/schema.sql` first on a fresh DB, then each pending migration. All migrations are idempotent and tracked in the `_migrations` table — safe to re-run on every deploy.
+A single file is the source of truth: [`deploy/schema.sql`](deploy/schema.sql). It declares every table, index, extension, and seed row (themes, ad zones).
+
+The file is fully idempotent — every `CREATE` is `IF NOT EXISTS`, every seed is `ON CONFLICT DO NOTHING`. Running it twice does nothing harmful.
+
+Two ways to apply it:
+
+- **Via the `/install` wizard** — the first thing the wizard does is run this file. No manual step.
+- **Via the CLI** — `npm run migrate` runs the same file. Useful for headless / Docker / CI installs.
+
+When the schema evolves we edit this single file directly; no migration archive to maintain. To upgrade a live database simply re-run `npm run migrate` after pulling new code.
 
 ## Roadmap
 
