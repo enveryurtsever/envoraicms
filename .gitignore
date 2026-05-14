@@ -11,3 +11,9 @@ out
 next-env.d.ts
 tsconfig.tsbuildinfo
 /public/Content
+
+# User-generated uploads — never commit. Shipped defaults
+# (Upload/default-cover.jpg, Upload/favicon/, admin-logo.png) stay tracked.
+/public/Upload/author/
+/public/Upload/content/
+/public/Upload/logo-*
