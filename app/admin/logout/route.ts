@@ -4,13 +4,19 @@ import { logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+// Relative Location header. Building an absolute URL via `new URL(..., request.url)`
+// breaks behind reverse proxies because request.url carries the upstream
+// (http://localhost:PORT/...) host, producing redirects to localhost.
+
+export async function GET() {
   await logAudit("auth", "signed out");
   await clearSession();
-  const url = new URL("/admin/login", request.url);
-  return NextResponse.redirect(url);
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/admin/login" },
+  });
 }
 
-export async function POST(request: Request) {
-  return GET(request);
+export async function POST() {
+  return GET();
 }

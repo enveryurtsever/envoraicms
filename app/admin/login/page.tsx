@@ -46,7 +46,12 @@ async function loginAction(formData: FormData) {
   await updateLastLogin(user.UserID);
   await logAudit("auth", "signed in");
 
-  const safeNext = next.startsWith("/admin") ? next : "/admin";
+  // Strip `next` values that point back to /admin/logout (or its prefix) so
+  // a logout-mid-flight doesn't trap the next sign-in in a redirect loop.
+  const safeNext =
+    next.startsWith("/admin") && !next.startsWith("/admin/logout")
+      ? next
+      : "/admin";
   redirect(safeNext);
 }
 
