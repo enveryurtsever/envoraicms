@@ -2,9 +2,11 @@
 
 > A modern, AI-assisted open-source CMS for content and news publishing — built on Next.js 15 and PostgreSQL.
 
-WordPress-style install: enter DB credentials, run the migrations, finish the `/install` wizard. The rest happens in the admin panel — no code edits, no config files to hunt down.
+WordPress-style install: enter DB credentials, finish the `/install` wizard. The rest happens in the admin panel — no code edits, no config files to hunt down.
 
 **Status:** Active development. Production-tested but APIs may shift before 1.0.
+
+**Live example:** [techawave.com](https://techawave.com) — a tech news site running on Envoraicms.
 
 ---
 
@@ -63,7 +65,7 @@ All credentials live in the **API Keys** screen in the admin (or for Google serv
 
 | Provider | Role | Used for | Notes |
 |---|---|---|---|
-| **[Google Gemini](https://ai.google.dev/)** | Meta AI / Content AI | Article titles, summaries, keywords, image prompts, full HTML body | Default choice; cheapest |
+| **[Google Gemini](https://gemini.google.com/)** | Meta AI / Content AI | Article titles, summaries, keywords, image prompts, full HTML body | Default choice; cheapest |
 | **[OpenAI](https://platform.openai.com/)** | Meta AI / Content AI | Same as above | GPT-4/4o family |
 | **[Anthropic Claude](https://www.anthropic.com/api)** | Meta AI / Content AI | Same as above | Claude 3.5 / 3.7 / 4.x family |
 | **[fal.ai](https://fal.ai/)** | Image AI | Cover image generation from prompts | Optional — pipeline runs without it |
@@ -73,7 +75,8 @@ All credentials live in the **API Keys** screen in the admin (or for Google serv
 | Provider | Used for | Notes |
 |---|---|---|
 | **[SerpAPI](https://serpapi.com/)** | Google Trends queries — the seed for article ideation | 100 free searches/month; primary trend source |
-| **[NewsNow](https://newsnow.io/)** | News article ingest pipeline (separate from the AI pipeline) | Pulls existing news stories instead of generating from scratch |
+| **[NewsNow (RapidAPI)](https://rapidapi.com/rphrp1985/api/newsnow)** | News article ingest pipeline (separate from the AI pipeline) | Pulls existing news stories for the rewrite path |
+| **[NewsAPI.ai](https://newsapi.ai/)** | Alternative news source for the news ingest pipeline | Drop-in alternative to NewsNow |
 
 ### Google services (admin-managed in `/admin/googlekit` and `/admin/indexing`)
 
