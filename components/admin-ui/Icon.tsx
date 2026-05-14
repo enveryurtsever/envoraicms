@@ -232,6 +232,16 @@ export function IconCode(p: IconProps) {
   );
 }
 
+export function IconDownload(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
 export type AdminIconKey =
   | "dashboard"
   | "newspaper"
@@ -247,7 +257,8 @@ export type AdminIconKey =
   | "wand"
   | "palette"
   | "users"
-  | "scroll";
+  | "scroll"
+  | "download";
 
 export function AdminIcon({
   name,
@@ -275,5 +286,6 @@ export function AdminIcon({
     case "palette":   return <IconPalette {...props} />;
     case "users":     return <IconUsers {...props} />;
     case "scroll":    return <IconScroll {...props} />;
+    case "download":  return <IconDownload {...props} />;
   }
 }

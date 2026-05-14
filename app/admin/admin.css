@@ -596,6 +596,34 @@
 }
 .adm-topbar__visit svg { display: block; }
 
+.adm-update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background 140ms ease;
+}
+.adm-update-pill:hover { background: #bbf7d0; }
+.adm-update-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55);
+  animation: adm-update-pulse 2s ease-in-out infinite;
+}
+@keyframes adm-update-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+}
+
 .adm-userpop { position: relative; }
 .adm-userpop__btn {
   display: flex;

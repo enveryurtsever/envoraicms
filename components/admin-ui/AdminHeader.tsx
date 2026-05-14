@@ -10,6 +10,11 @@ export type AdminHeaderUser = {
   avatarUrl: string | null;
 };
 
+type VersionPing = {
+  hasUpdate: boolean;
+  latest: { tag: string } | null;
+};
+
 export function AdminHeader({
   user,
   pageTitle,
@@ -19,6 +24,29 @@ export function AdminHeader({
 }) {
   const [now, setNow] = useState<string>("");
   const [open, setOpen] = useState(false);
+  const [versionPing, setVersionPing] = useState<VersionPing | null>(null);
+
+  // Admin-only version check on mount. The server caches the GitHub call for
+  // 24 hours, so this effectively runs at most once per day across all admin
+  // tabs/sessions. No interval — the cached result is returned cheaply on
+  // every page load until the TTL expires.
+  useEffect(() => {
+    if (user.role !== "admin") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/system/version", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as VersionPing;
+        if (!cancelled) setVersionPing(data);
+      } catch {
+        /* offline / GitHub blip — silent */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.role]);
 
   useEffect(() => {
     const fmt = () => {
@@ -68,6 +96,18 @@ export function AdminHeader({
         {pageTitle ? <span className="adm-topbar__page">{pageTitle}</span> : null}
       </div>
       <div className="adm-topbar__right">
+        {versionPing?.hasUpdate && versionPing.latest ? (
+          <Link
+            href="/admin/system/update"
+            className="adm-update-pill"
+            title="A new release is available"
+          >
+            <span className="adm-update-pill__dot" aria-hidden />
+            <span>
+              Update available · <strong>{versionPing.latest.tag}</strong>
+            </span>
+          </Link>
+        ) : null}
         <a
           href="/"
           target="_blank"

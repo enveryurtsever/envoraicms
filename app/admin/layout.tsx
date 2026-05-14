@@ -36,6 +36,7 @@ const NAV_ITEMS: (NavItem & { adminOnly?: boolean })[] = [
   { href: "/admin/themes",     label: "Themes",         icon: "palette" },
   { href: "/admin/users",      label: "Users",          icon: "users", adminOnly: true },
   { href: "/admin/logs",       label: "Audit Logs",     icon: "scroll", adminOnly: true },
+  { href: "/admin/system/update", label: "Updates",     icon: "download", adminOnly: true },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
