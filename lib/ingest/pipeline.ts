@@ -11,6 +11,7 @@ import {
   ensureUniqueSlug,
   insertIngestedContent,
 } from "./db";
+import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
 export type PipelineInput = {
   cat: IngestCategory;
@@ -86,6 +87,8 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutcome
         imagePath,
         staggerMinutes: inserted * 15,
       });
+      const url = await buildContentUrl(cat.CatSeo, rewritten.slug);
+      submitIndexingFireAndForget(id, url, "URL_UPDATED");
       inserted += 1;
       log.push(
         `[ok] ContentID=${id} importance=${rewritten.importance}${

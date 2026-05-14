@@ -1,4 +1,6 @@
 import "server-only";
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { sql } from "@/lib/db";
 import type { Author } from "@/lib/types";
 import { generateRandomAuthor } from "@/lib/authors/random";
@@ -11,29 +13,46 @@ const BASE_COLS = sql`
   "CreatedDate"
 `;
 
-export async function listAuthors(): Promise<Author[]> {
-  return sql<Author[]>`
-    SELECT ${BASE_COLS} FROM "Authors"
-    WHERE "IsDeleted" = FALSE
-    ORDER BY "AuthorID" ASC
-  `;
-}
+const loadAll = unstable_cache(
+  async (): Promise<Author[]> =>
+    sql<Author[]>`
+      SELECT ${BASE_COLS} FROM "Authors"
+      WHERE "IsDeleted" = FALSE
+      ORDER BY "AuthorID" ASC
+    `,
+  ["authors:all"],
+  { revalidate: 3600, tags: ["authors"] },
+);
 
-export async function getAuthorById(id: number): Promise<Author | null> {
-  const rows = await sql<Author[]>`
-    SELECT ${BASE_COLS} FROM "Authors"
-    WHERE "AuthorID" = ${id} AND "IsDeleted" = FALSE LIMIT 1
-  `;
-  return rows[0] ?? null;
-}
+export const listAuthors = cache(loadAll);
 
-export async function getAuthorBySlug(slug: string): Promise<Author | null> {
-  const rows = await sql<Author[]>`
-    SELECT ${BASE_COLS} FROM "Authors"
-    WHERE "Slug" = ${slug} AND "IsDeleted" = FALSE LIMIT 1
-  `;
-  return rows[0] ?? null;
-}
+const loadById = unstable_cache(
+  async (id: number): Promise<Author | null> => {
+    const rows = await sql<Author[]>`
+      SELECT ${BASE_COLS} FROM "Authors"
+      WHERE "AuthorID" = ${id} AND "IsDeleted" = FALSE LIMIT 1
+    `;
+    return rows[0] ?? null;
+  },
+  ["author:by-id"],
+  { revalidate: 3600, tags: ["authors"] },
+);
+
+export const getAuthorById = cache((id: number) => loadById(id));
+
+const loadBySlug = unstable_cache(
+  async (slug: string): Promise<Author | null> => {
+    const rows = await sql<Author[]>`
+      SELECT ${BASE_COLS} FROM "Authors"
+      WHERE "Slug" = ${slug} AND "IsDeleted" = FALSE LIMIT 1
+    `;
+    return rows[0] ?? null;
+  },
+  ["author:by-slug"],
+  { revalidate: 3600, tags: ["authors"] },
+);
+
+export const getAuthorBySlug = cache((slug: string) => loadBySlug(slug));
 
 export async function createAuthor(data: {
   displayName: string;
@@ -100,6 +119,42 @@ export async function getRandomAuthorForCategory(catId: number): Promise<Author 
   `;
   return any[0] ?? null;
 }
+
+const loadActiveAuthors = unstable_cache(
+  async (): Promise<Author[]> =>
+    sql<Author[]>`
+      SELECT ${BASE_COLS} FROM "Authors"
+      WHERE "IsActive" = TRUE AND "IsDeleted" = FALSE
+    `,
+  ["authors:active"],
+  { revalidate: 3600, tags: ["authors"] },
+);
+
+export type AuthorPicker = (catId: number | null | undefined) => Author | null;
+
+/** Returns a closure that picks a random active author per category, in-memory.
+ *  Pipelines call this once per run instead of issuing two DB queries per
+ *  Content insert (the old getRandomAuthorForCategory pattern). */
+export const buildAuthorPicker = cache(async (): Promise<AuthorPicker> => {
+  const all = await loadActiveAuthors();
+  const byCat = new Map<number, Author[]>();
+  for (const a of all) {
+    if (a.FK_CatID == null) continue;
+    const list = byCat.get(a.FK_CatID);
+    if (list) list.push(a);
+    else byCat.set(a.FK_CatID, [a]);
+  }
+  return (catId) => {
+    if (catId != null) {
+      const list = byCat.get(catId);
+      if (list && list.length > 0) {
+        return list[Math.floor(Math.random() * list.length)];
+      }
+    }
+    if (all.length > 0) return all[Math.floor(Math.random() * all.length)];
+    return null;
+  };
+});
 
 /** Generates a fresh slug. Falls back to numeric suffix on collision. */
 async function ensureUniqueSlug(base: string): Promise<string> {

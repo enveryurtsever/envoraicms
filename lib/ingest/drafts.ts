@@ -51,7 +51,7 @@ export async function saveDraft(args: {
       (${provider}, ${externalId},
        ${sql.json(raw as never)},
        ${topImage}, ${sourceTitle}, ${sourceUrl}, ${cronId}, 'pending')
-    ON CONFLICT ("Provider", "ExternalID") DO NOTHING
+    ON CONFLICT ("Provider", "ExternalID") WHERE "ExternalID" IS NOT NULL DO NOTHING
     RETURNING "DraftID"::text AS "DraftID"
   `;
   return rows[0]?.DraftID ?? null;
@@ -69,12 +69,22 @@ export async function listDraftsByStatus(
   `;
 }
 
-export async function listRecentDrafts(limit = 50): Promise<Draft[]> {
+export async function listRecentDrafts(
+  limit = 50,
+  offset = 0,
+): Promise<Draft[]> {
   return sql<Draft[]>`
     SELECT ${COLS} FROM "NewsApiDrafts"
     ORDER BY "FetchedAt" DESC
-    LIMIT ${limit}
+    LIMIT ${limit} OFFSET ${offset}
   `;
+}
+
+export async function countAllDrafts(): Promise<number> {
+  const rows = await sql<{ c: number }[]>`
+    SELECT COUNT(*)::int AS c FROM "NewsApiDrafts"
+  `;
+  return rows[0]?.c ?? 0;
 }
 
 export async function getDraft(id: string | number): Promise<Draft | null> {

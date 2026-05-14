@@ -28,8 +28,22 @@ async function flush(): Promise<void> {
   const store = getStore();
   if (store.flushing || store.buffer.size === 0) return;
   store.flushing = true;
-  const snapshot = Array.from(store.buffer.entries());
+  const snapshot = Array.from(store.buffer.entries()).filter(
+    // Defensive: a single corrupted entry (NaN, non-finite) used to take
+    // down the whole flush with `invalid input syntax for type bigint`,
+    // which then trapped the snapshot in retry purgatory.
+    ([id, delta]) =>
+      Number.isFinite(id) &&
+      Number.isInteger(id) &&
+      id > 0 &&
+      Number.isFinite(delta) &&
+      delta > 0,
+  );
   store.buffer.clear();
+  if (snapshot.length === 0) {
+    store.flushing = false;
+    return;
+  }
   try {
     const ids = snapshot.map(([id]) => id);
     const deltas = snapshot.map(([, d]) => d);

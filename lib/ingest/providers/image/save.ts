@@ -4,7 +4,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 const PROJECT_ROOT = process.cwd();
-const CONTENT_DIR = join(PROJECT_ROOT, "public", "Content");
+const CONTENT_DIR = join(PROJECT_ROOT, "public", "Upload", "content");
 const THUMB_DIR = join(CONTENT_DIR, "thumb");
 
 const MAX_WIDTH = 1280;
@@ -34,5 +34,5 @@ export async function saveContentImage(buf: Buffer, slug: string): Promise<strin
     .webp({ quality: THUMB_QUALITY, effort: ENCODE_EFFORT })
     .toFile(thumbPath);
 
-  return `/Content/${slug}.webp`;
+  return `/Upload/content/${slug}.webp`;
 }

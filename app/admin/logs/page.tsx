@@ -8,8 +8,6 @@ import {
 } from "@/lib/queries/audit-logs";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 
-export const dynamic = "force-dynamic";
-
 const PAGE_SIZE = 50;
 
 const TR_DATE = new Intl.DateTimeFormat("tr-TR", {
@@ -25,6 +23,8 @@ function fmt(d: Date | string): string {
   const dt = d instanceof Date ? d : new Date(d);
   return TR_DATE.format(dt);
 }
+
+export const metadata = { title: "Audit Logs" };
 
 export default async function LogsPage({
   searchParams,

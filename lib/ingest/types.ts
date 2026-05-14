@@ -18,6 +18,13 @@ export type IngestCategory = {
   CatSeo: string;
 };
 
+/** Category enriched with the metadata the article-ideation router needs to
+ *  build per-category trend seeds and AI prompts. */
+export type RoutableCategory = IngestCategory & {
+  CatKeywords: string | null;
+  CatDesc: string | null;
+};
+
 export type Rewritten = {
   title: string;
   short: string;
@@ -50,8 +57,9 @@ export interface TextAiProvider {
 export interface ImageProvider {
   name: string;
   /**
-   * Writes /Content/<slug>.webp based on the slug and returns the public path.
-   * passthrough orijinal thumbnail'i indirir; falai fresh bir resim generateir.
+   * Writes /Upload/content/<slug>.webp based on the slug and returns the
+   * public path. passthrough orijinal thumbnail'i indirir; falai fresh bir
+   * resim generateir.
    */
   generate(args: {
     prompt: string;

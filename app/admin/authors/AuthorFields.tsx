@@ -1,7 +1,18 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { Author, Category } from "@/lib/types";
-import { RichTextEditor } from "@/components/admin-ui/RichTextEditor";
+
+// Lazy: AuthorsClient imports AuthorFields eagerly so the modal can open
+// instantly, but the editor itself only matters when the modal is actually
+// open. Splits the editor chunk out of the /admin/authors initial bundle.
+const RichTextEditor = dynamic(
+  () =>
+    import("@/components/admin-ui/RichTextEditor").then((m) => ({
+      default: m.RichTextEditor,
+    })),
+  { ssr: false },
+);
 
 export function AuthorFields({
   categories,

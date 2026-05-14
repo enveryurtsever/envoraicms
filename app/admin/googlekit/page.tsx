@@ -3,7 +3,7 @@ import { getSettings } from "@/lib/queries/settings";
 import { FormSkeleton } from "@/components/admin-ui/Skeletons";
 import { GoogleKitClient } from "./GoogleKitClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Google Kit" };
 
 export default function GoogleKitPage() {
   return (

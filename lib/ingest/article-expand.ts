@@ -7,6 +7,13 @@ import { getPromptTemplate } from "@/lib/queries/prompts";
 import { ensureUniqueSlug } from "./db";
 import { makeFalaiProvider } from "./providers/image/falai";
 import { downloadAndStoreImage } from "./download-image";
+import { fixSearchLinks } from "./sanitize-links";
+import { currentDateContext } from "./prompt-context";
+import type { AuthorPicker } from "@/lib/queries/authors";
+import {
+  buildContentUrl,
+  submitIndexingFireAndForget,
+} from "@/lib/indexing/submit";
 
 function slugify(s: string): string {
   return s
@@ -36,8 +43,13 @@ export async function expandArticleDraft(args: {
   category: IngestCategory;
   imageProvider: "passthrough" | "falai";
   log: string[];
+  pickAuthor: AuthorPicker;
+  /** Backdate PublishDate by this many minutes so a batch of inserts
+   *  spreads across a believable window instead of clustering on one
+   *  identical timestamp. */
+  staggerMinutes?: number;
 }): Promise<number> {
-  const { draft, category, imageProvider, log } = args;
+  const { draft, category, imageProvider, log, pickAuthor, staggerMinutes = 0 } = args;
 
   // 1) Content AI fills in the full body + meta fields.
   const contentAI = await getActiveTextAI("content");
@@ -52,6 +64,7 @@ export async function expandArticleDraft(args: {
     user: userPrompt,
   });
   validateExpanded(expanded);
+  expanded.detail = fixSearchLinks(expanded.detail);
 
   // 2) Slug — prefer the freshly produced one, fall back to the seed slug.
   let slug = expanded.slug ? slugify(expanded.slug) : "";
@@ -67,7 +80,7 @@ export async function expandArticleDraft(args: {
   const promptForImage =
     expanded.imagePrompt?.trim() ||
     draft.ImagePrompt?.trim() ||
-    `${expanded.title} — editorial photograph, no text, no logos`;
+    `${expanded.title}. Editorial photograph, no text, no logos.`;
 
   if (imageProvider === "falai") {
     try {
@@ -81,7 +94,7 @@ export async function expandArticleDraft(args: {
       log.push(
         `[draft#${draft.DraftID}] fal.ai failed: ${
           err instanceof Error ? err.message : String(err)
-        } — leaving image empty`,
+        }. Leaving image empty.`,
       );
       imagePath = "";
     }
@@ -98,11 +111,15 @@ export async function expandArticleDraft(args: {
     }
   }
 
-  // 4) INSERT INTO Contents.
+  // 4) INSERT INTO Contents. PublishDate is shifted INTO THE FUTURE by
+  //    staggerMinutes — the order in this expansion batch decides when each
+  //    article goes live. IsActive is FALSE while the publish moment is in
+  //    the future; the scheduler activator flips it to TRUE on time and
+  //    fires the indexing call at that point.
   const importance = clampInt(expanded.importance ?? 5, 1, 10);
   const homepage = importance >= 7;
-  const { getRandomAuthorForCategory } = await import("@/lib/queries/authors");
-  const author = await getRandomAuthorForCategory(category.CatID);
+  const author = pickAuthor(category.CatID);
+  const isActive = staggerMinutes <= 0;
   const rows = await sql<{ ContentID: number }[]>`
     INSERT INTO "Contents" (
       "FK_CatID","FK_LangID","ContentTitle","ContentShort","ContentDetail",
@@ -112,8 +129,10 @@ export async function expandArticleDraft(args: {
     ) VALUES (
       ${category.CatID}, 1, ${expanded.title}, ${expanded.short}, ${expanded.detail},
       ${expanded.keywords}, ${expanded.desc}, ${imagePath || null}, ${slug},
-      NULL, NULL, ${homepage}, TRUE, FALSE,
-      NOW(), NOW(), NOW(),
+      NULL, NULL, ${homepage}, ${isActive}, FALSE,
+      NOW() + (${staggerMinutes} || ' minutes')::interval,
+      NOW() + (${staggerMinutes} || ' minutes')::interval,
+      NOW(),
       ${expanded.imagePrompt ?? draft.ImagePrompt ?? null},
       ${author?.AuthorID ?? null}
     )
@@ -121,8 +140,27 @@ export async function expandArticleDraft(args: {
   `;
   const contentId = rows[0].ContentID;
   log.push(
-    `[draft#${draft.DraftID}] inserted Content#${contentId} as ${slug}`,
+    `[draft#${draft.DraftID}] inserted Content#${contentId} as ${slug} ` +
+      (isActive
+        ? "(live now)"
+        : `(scheduled in ${staggerMinutes} min)`),
   );
+
+  // Only ping Google when the article is live. The activator fires its own
+  // indexing call when it flips IsActive=TRUE for scheduled articles.
+  if (isActive) {
+    try {
+      const url = await buildContentUrl(category.CatSeo, slug);
+      submitIndexingFireAndForget(contentId, url, "URL_UPDATED");
+    } catch (err) {
+      log.push(
+        `[draft#${draft.DraftID}] indexing dispatch failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
   return contentId;
 }
 
@@ -153,46 +191,70 @@ function buildExpandPrompt(args: {
 }): string {
   const d = args.draft;
   return [
+    currentDateContext(),
+    "",
     `Site category: ${args.category.CatName} (slug: ${args.category.CatSeo})`,
     `Source trend (search query that inspired this piece): ${d.TrendQuery ?? "(none)"}`,
     `Seed title: ${d.Title}`,
     d.Summary ? `Seed summary: ${d.Summary}` : "",
     d.Keywords ? `Seed keywords: ${d.Keywords}` : "",
     "",
-    "Write a fresh, evergreen, US-audience English article from this brief.",
+    "Write a fresh, US-audience English article from this brief. The trend that inspired the piece was searched in the past few days, so treat the angle as current news, not evergreen reference. Lead with a concrete fact, scene, or named person in the very first sentence; do not restate the headline. No 'in this article we will explore' or similar throat-clearing.",
     "Return strict JSON with: title, short, detail (HTML), keywords, desc, slug, imagePrompt, importance (1-10).",
-    "The detail must be 700-1000 words, photojournalistic / wire-service tone, with one <h2>, at least one direct quote with attribution, and 3-5 internal search links of the form <a href=\"/search/KEYWORD\">phrase</a>.",
-    "Allowed tags: <p>, <h2>, <strong>, <em>, <ul>, <li>, <a>. No <html>, <body>, <script>, <img>, <iframe>.",
-    "No clickbait. No 'in this article we will explore'. Lead with a concrete fact in the first sentence.",
+    "The detail must be 700-1000 words, calm professional journalism tone, with two or three <h2> section headings that break the article into distinct angles (e.g. context / what's new / why it matters), at least one direct quote with attribution, and 3 to 5 internal search links of the form <a href=\"/search/KEYWORD\">phrase</a>.",
+    "Paragraph rule: keep each <p> short, 2 to 4 sentences max, never longer than ~80 words. Long paragraphs read as wall-of-text. If you have more material on one point, split it into two paragraphs or move part of it under an <h2>.",
+    "When the source enumerates items (bug fixes, features, models, products), use a <ul><li> list rather than packing them into one long paragraph. Lists are also preferred over prose for any sequence of three or more parallel items.",
+    "Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. If a bug or issue is mentioned, summarize it in plain English; only include an ID inline when it adds reader value, and at most once or twice per article.",
+    "Allowed tags: <p>, <h2>, <h3>, <strong>, <em>, <ul>, <ol>, <li>, <a>, <blockquote>. No <html>, <body>, <script>, <img>, <iframe>.",
+    "Punctuation: never use the em dash or en dash characters anywhere (title, short, detail, desc, imagePrompt). Use commas, periods, colons, parentheses, or rewrite. Hyphens inside compound words are fine.",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-const DEFAULT_EXPAND_SYSTEM = `You expand an editorial brief into a complete, original article for a US-audience English website. The brief gives you a category, a seed title, a short summary, keywords, and the trending query that inspired it.
+const DEFAULT_EXPAND_SYSTEM = `You write the full article from an editorial brief. The brief gives you a category, a seed title, a short summary, keywords, and the trending query that inspired the piece. You are writing for a smart general English-speaking audience that reads news and tech magazines, not for an SEO crawler.
 
-Return STRICT JSON with these exact keys:
-- title: 50-70 characters, SEO-optimized. The primary keyword (first entry in keywords) MUST appear, preferably near the start. No clickbait. No emoji. No ALL-CAPS words except acronyms. End with a concrete noun.
-- short: 1-2 sentences, <= 220 characters.
-- detail: 700-1000 words of HTML. Required structure:
-    1. Opening paragraph answering who/what/where/when in concrete terms.
-    2. At least one direct quote with attribution (real-sounding sources only — fabricate if you must but keep it plausible: e.g. industry analysts, named experts).
-    3. One <h2> subheading mid-article signaling a thematic shift.
-    4. Specific numbers, dates, proper nouns. No vague "some" / "many" / "recently".
-    5. Vary paragraph length.
-    6. Allowed tags: <p>, <h2>, <strong>, <em>, <ul>, <li>, <a>. NO <html>, <body>, <script>, <img>, <iframe>.
-- keywords: 5-8 lowercase comma-separated; the first is the primary and MUST appear in title and detail body.
-- desc: meta description 150-160 chars, compelling, includes primary keyword.
-- slug: kebab-case 4-10 words, descriptive.
-- imagePrompt: <= 200 chars, photojournalistic, no text/logos/watermarks.
-- importance: integer 1-10 — newsworthiness/SEO value (typical evergreen = 4-6).
+Voice and style:
+- Sound like a real journalist with a beat. Confident, calm, specific. No hedging filler such as "in this article we will explore", "in today's fast-paced world", "let's dive in".
+- Lead with a fact, scene, or named person in the first sentence. Do not open by restating the headline.
+- Vary sentence and paragraph length. Some short, some longer. Do not use the same connective ("Moreover", "Furthermore", "Additionally") more than once across the whole piece.
+- Quote at least one named source. If the brief does not supply one, attribute to a plausible expert with a real-sounding role and organization. Keep quotes short and conversational, not corporate.
+- Use specific numbers, dates, and proper nouns where they help. Avoid vague "many", "some", or "recently" without backing.
+- Do not moralize, do not editorialize, do not close with a "looking forward" wrap-up paragraph.
 
-Internal keyword linking:
-- Inside the detail body, turn 3-5 of the keywords into internal search links: <a href="/search/KEYWORD">phrase</a>
+Punctuation rules (strict, non-negotiable, apply to every field you produce):
+- Never use the em dash character. If you want a pause, use a comma, a period, a colon, parentheses, or rewrite the sentence.
+- Never use the en dash character. Plain hyphens inside compound words are fine.
+- Do not use semicolons inside the title or short.
+- Do not end any field with an ellipsis.
+
+Banned phrases and AI tells (do not use any of these):
+- delve, delving into, in the realm of, navigating the landscape, paradigm shift, leverage (as a verb), unlock the power of, in today's [adjective] world, the world of [noun], game-changing, revolutionary, cutting-edge, robust, seamless, unparalleled, "it is important to note", "it is worth noting", tapestry of.
+- Do not write "transforms" or "is transforming" in the title.
+
+JSON keys:
+- title: a real-sounding headline. Do not force the keyword to the front. Do not end with a stacked-noun phrase. 50 to 75 characters typical.
+- short: 1 or 2 natural sentences, up to 220 characters.
+- detail: 700 to 1000 words of HTML. Required structure:
+    1. Opening paragraph answering who, what, where, when in concrete terms.
+    2. At least one direct quote with attribution.
+    3. Two or three <h2> subheadings that break the article into distinct angles (e.g. context, what's new, why it matters). Headings must signal a real shift in topic, not just a label.
+    4. Keep each <p> short: 2 to 4 sentences, never longer than ~80 words. Wall-of-text paragraphs are not acceptable. Split or move material under an <h2> instead.
+    5. Use a <ul><li> list whenever the source enumerates three or more parallel items (bug fixes, features, products). Do not pack enumerations into a single long paragraph.
+    6. Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. Summarize the issue in plain English; include an ID inline only when it adds reader value, at most once or twice per article.
+    7. Specific numbers, dates, proper nouns. No vague "some", "many", "recently".
+    8. Vary paragraph length within the 2-4 sentence cap.
+    9. Allowed tags: <p>, <h2>, <h3>, <strong>, <em>, <ul>, <ol>, <li>, <a>, <blockquote>. NO <html>, <body>, <script>, <img>, <iframe>.
+- keywords: 5 to 8 lowercase, comma-separated, in order of relevance. The first should appear in the body naturally.
+- desc: meta description 150 to 160 characters that reads like a real summary, not a keyword stuff.
+- slug: kebab-case 4 to 10 words, descriptive.
+- imagePrompt: up to 200 characters, photojournalistic, no text or logos or watermarks.
+- importance: integer 1 to 10 (typical evergreen 4 to 6).
+
+Internal keyword linking inside detail:
+- Turn 3 to 5 of the keywords into internal search links: <a href="/search/KEYWORD">phrase</a>.
 - Replace spaces in KEYWORD with %20.
-- Only link the FIRST occurrence of each chosen keyword.
+- Link only the first occurrence of each chosen keyword.
 - Never put a link inside a heading.
-
-Tone: confident professional journalism, no AI tells ("delving", "in the realm of", "it is important to note"). Report — don't editorialize.
 
 Output ONLY the JSON object. No markdown fences, no commentary.`;

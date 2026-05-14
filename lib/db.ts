@@ -15,12 +15,31 @@ type Sql = ReturnType<typeof postgres>;
 function buildPool(): Sql {
   const cfg = requireDbConfig();
   const args = buildPostgresArgs(cfg, {
-    max: 10,
-    idle_timeout: 20,
+    // Sized for concurrent web traffic + ingest pipelines running side-by-side.
+    // Web requests stay sub-second; ingest jobs (rewrite/ideation/recent-titles
+    // window functions) can take longer, hence the 15s statement_timeout below.
+    max: 25,
+    idle_timeout: 30,
     connect_timeout: 10,
     prepare: true,
-    connection: { statement_timeout: 5000 },
+    connection: { statement_timeout: 15000 },
     transform: { undefined: null },
+    // PG TIMESTAMP WITHOUT TIME ZONE (OID 1114) is naive — postgres-js's
+    // default parser feeds it to `new Date(...)`, which JS interprets in the
+    // server's local TZ. We always store UTC, so force UTC parsing here.
+    // Otherwise admins on non-UTC machines (Mac EDT, etc.) see publish
+    // dates shifted by their offset.
+    // postgres-js's Options generic narrows `types` to `never`; a local
+    // cast is the lightest escape hatch.
+    types: {
+      timestamp: {
+        to: 1114,
+        from: [1114],
+        serialize: (val: Date | string) =>
+          val instanceof Date ? val.toISOString() : val,
+        parse: (val: string) => new Date(val.replace(" ", "T") + "Z"),
+      },
+    } as never,
   });
   // postgres() iki overload kabul eder: (url, opts) ve (opts).
   // buildPostgresArgs already picked the right shape; we just spread it.

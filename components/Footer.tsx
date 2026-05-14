@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Category, LinkRow, Settings } from "@/lib/types";
 import { SocialIcon } from "@/components/SocialIcon";
+import { getFooterLinks } from "@/lib/queries/links";
 
 type FooterProps = {
   settings: Settings;
@@ -9,6 +10,26 @@ type FooterProps = {
   pages: LinkRow[];
   socials: LinkRow[];
 };
+
+// Async wrapper that fetches the footer-specific link rows on its own.
+// Used inside <Suspense> so the page shell streams without waiting on this.
+export async function FooterStream({
+  settings,
+  categories,
+}: {
+  settings: Settings;
+  categories: Category[];
+}) {
+  const footerLinks = await getFooterLinks();
+  return (
+    <Footer
+      settings={settings}
+      categories={settings.ShowFooterMenu !== false ? categories : []}
+      pages={settings.ShowFooterMenu !== false ? footerLinks.pages : []}
+      socials={footerLinks.socials}
+    />
+  );
+}
 
 function resolveLogo(raw?: string | null, siteUrl?: string | null): string | null {
   if (!raw) return null;

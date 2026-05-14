@@ -30,18 +30,18 @@ export async function CategoryView({ slug, page }: { slug: string; page: number 
 
   return (
     <>
-      <nav aria-label="Breadcrumb" className="mb-4 text-xs text-neutral-500">
+      <nav aria-label="Breadcrumb" className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">
         <Link href="/" className="hover:text-brand">Home</Link>
         <span className="mx-2">›</span>
-        <span className="text-neutral-800">{cat.CatName}</span>
+        <span className="text-neutral-800 dark:text-neutral-200">{cat.CatName}</span>
       </nav>
 
-      <header className="mb-6 border-b border-neutral-200 pb-4">
-        <h1 className="text-2xl font-bold uppercase tracking-wide text-neutral-900 md:text-3xl">
+      <header className="mb-6 border-b border-neutral-200 pb-4 dark:border-neutral-700">
+        <h1 className="text-2xl font-bold uppercase tracking-wide text-neutral-900 md:text-3xl dark:text-neutral-100">
           {cat.CatTitle}
         </h1>
         {cat.CatDesc ? (
-          <p className="mt-2 text-sm text-neutral-600 md:text-base">{cat.CatDesc}</p>
+          <p className="mt-2 text-sm text-neutral-600 md:text-base dark:text-neutral-400">{cat.CatDesc}</p>
         ) : null}
       </header>
 
@@ -54,22 +54,22 @@ export async function CategoryView({ slug, page }: { slug: string; page: number 
             {settings.AdsEnabled ? (
               <AdSlot name="sidebar-half" className="h-full w-full" />
             ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 bg-neutral-50 p-6 text-center">
+              <div className="flex h-full w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 bg-neutral-50 p-6 text-center dark:border-neutral-700 dark:bg-neutral-900">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-brand">
                   Advertise
                 </span>
-                <h3 className="mt-2 text-lg font-bold text-neutral-900">
+                <h3 className="mt-2 text-lg font-bold text-neutral-900 dark:text-neutral-100">
                   Your Ad Could Be Here
                 </h3>
-                <p className="mt-2 text-sm text-neutral-600">
+                <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
                   Reach thousands of readers every day. Promote your brand in this premium spot.
                 </p>
-                <a
-                  href="mailto:ads@envoraicms.com?subject=Advertising%20Inquiry"
+                <Link
+                  href="/s/contact"
                   className="mt-4 inline-flex items-center rounded bg-brand px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white hover:bg-brand/90"
                 >
                   Contact Us
-                </a>
+                </Link>
               </div>
             )}
           </aside>
@@ -94,18 +94,18 @@ export async function CategoryView({ slug, page }: { slug: string; page: number 
           {page > 1 ? (
             <Link
               href={pageHref(page - 1)}
-              className="rounded border border-neutral-300 px-3 py-2 hover:border-brand hover:text-brand"
+              className="rounded border border-neutral-300 px-3 py-2 hover:border-brand hover:text-brand dark:border-neutral-700 dark:text-neutral-300"
             >
               ← Previous
             </Link>
           ) : null}
-          <span className="px-3 py-2 text-neutral-600">
+          <span className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
             Page {page} of {totalPages}
           </span>
           {page < totalPages ? (
             <Link
               href={pageHref(page + 1)}
-              className="rounded border border-neutral-300 px-3 py-2 hover:border-brand hover:text-brand"
+              className="rounded border border-neutral-300 px-3 py-2 hover:border-brand hover:text-brand dark:border-neutral-700 dark:text-neutral-300"
             >
               Next →
             </Link>

@@ -11,7 +11,8 @@
     "migrate": "tsx scripts/migrate.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "seed:authors": "tsx scripts/seed-authors.ts",
-    "ingest:runner": "tsx scripts/ingest-runner.ts"
+    "ingest:runner": "tsx scripts/ingest-runner.ts",
+    "grant-indexing-owner": "tsx scripts/grant-indexing-owner.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

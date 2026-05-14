@@ -7,10 +7,15 @@ import { AdminHeader } from "@/components/admin-ui/AdminHeader";
 import { SidebarNav, type NavItem } from "@/components/admin-ui/SidebarNav";
 import "./admin.css";
 
-export const dynamic = "force-dynamic";
+// Note: no `force-dynamic` here — getSession() reads cookies which already
+// makes every admin segment dynamic. Dropping the explicit flag lets Next
+// dedup in-flight requests for the same path (eg. rapid double-clicks).
 
 export const metadata = {
-  title: "Admin — ENVORAICMS",
+  title: {
+    template: "%s · ENVORAICMS",
+    default: "Admin · ENVORAICMS",
+  },
   robots: { index: false, follow: false },
 };
 

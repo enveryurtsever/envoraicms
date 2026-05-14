@@ -186,7 +186,7 @@ function ImageRow({
           name={name}
           type="text"
           defaultValue={value ?? ""}
-          placeholder="/Content/xxx.webp or /Upload/content/..."
+          placeholder="/Upload/content/xxx.webp"
         />
         <div style={{ marginTop: "0.4rem" }}>
           <input

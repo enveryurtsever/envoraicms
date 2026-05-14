@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { UsersClient } from "./UsersClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Users" };
 
 export default function UsersPage() {
   return (

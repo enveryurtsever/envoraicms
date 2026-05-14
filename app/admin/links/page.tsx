@@ -3,7 +3,7 @@ import { listAllLinks } from "@/lib/queries/admin-links";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { LinksClient } from "./LinksClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Pages" };
 
 export default function LinksPage() {
   return (

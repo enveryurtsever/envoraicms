@@ -4,7 +4,7 @@ import { listThemes } from "@/lib/queries/themes";
 import { FormSkeleton } from "@/components/admin-ui/Skeletons";
 import { SettingsClient } from "./SettingsClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Settings" };
 
 export default function SettingsPage() {
   return (

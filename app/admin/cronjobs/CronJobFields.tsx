@@ -27,6 +27,8 @@ const NEWS_PROVIDERS = [
 
 const TEXT_PROVIDERS = [
   { value: "gemini", label: "Google Gemini", hint: "Uses your active Gemini API key to humanize the article." },
+  { value: "openai", label: "OpenAI", hint: "Uses your active OpenAI API key to humanize the article." },
+  { value: "anthropic", label: "Anthropic Claude", hint: "Uses your active Anthropic API key to humanize the article." },
 ];
 
 const IMAGE_PROVIDERS = [
@@ -71,6 +73,14 @@ const NEWSNOW_LOCATIONS = [
   { value: "kr", label: "South Korea" },
 ];
 
+const TRENDS_WINDOWS: { value: string; label: string; hint: string }[] = [
+  { value: "now 1-d", label: "Past 24 hours", hint: "Riding today's news cycle. Best for breaking-news categories." },
+  { value: "now 7-d", label: "Past 7 days", hint: "Default. Fresh enough to feel timely, deep enough to dedupe." },
+  { value: "today 1-m", label: "Past 30 days", hint: "Slower-moving niches. Less risk of repeating yesterday's piece." },
+  { value: "today 3-m", label: "Past 90 days", hint: "Quarterly seasonality. Use when 30 days is too thin." },
+  { value: "today 12-m", label: "Past 12 months", hint: "Evergreen seed. SerpAPI's own default." },
+];
+
 const NEWSNOW_LANGUAGES = [
   { value: "en", label: "English" },
   { value: "es", label: "Español" },
@@ -102,6 +112,12 @@ export function CronJobFields({
   const activeNews = NEWS_PROVIDERS.find((p) => p.value === newsProvider) ?? NEWS_PROVIDERS[0];
 
   const cfg = v?.Config ?? {};
+
+  const initialArticleMode: "single" | "router" =
+    cfg.routerMode === true ? "router" : "single";
+  const [articleMode, setArticleMode] = useState<"single" | "router">(
+    initialArticleMode,
+  );
 
   return (
     <>
@@ -299,38 +315,108 @@ export function CronJobFields({
       {kind === "article" ? (
       <Section
         title="What topic should the articles cover?"
-        description="SerpAPI fetches trending queries related to your seed; the active Meta AI turns each one into a draft (title, summary, keywords, image prompt)."
+        description="SerpAPI fetches trending queries; the active Meta AI rewrites each into a clean editorial title and (in router mode) routes it to the right category."
       >
+        <input type="hidden" name="ArticleMode" value={articleMode} />
+
         <div className="form-row">
-          <label htmlFor="SeedQuery">Seed topic *</label>
-          <div>
-            <input
-              id="SeedQuery"
-              type="text"
-              name="SeedQuery"
-              required
-              defaultValue={(cfg.seedQuery as string | undefined) ?? ""}
-              placeholder="e.g. AI productivity tools"
-            />
-            <small>The seed Google Trends will use to find related trending queries.</small>
+          <label>Routing mode</label>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <ToggleChip
+              active={articleMode === "router"}
+              onClick={() => setArticleMode("router")}
+            >
+              🧭 Router (auto, all categories)
+            </ToggleChip>
+            <ToggleChip
+              active={articleMode === "single"}
+              onClick={() => setArticleMode("single")}
+            >
+              📌 Single category (manual seed)
+            </ToggleChip>
           </div>
         </div>
 
-        <div className="form-row">
-          <label htmlFor="TargetCatID">Target site category *</label>
-          <select
-            id="TargetCatID"
-            name="TargetCatID"
-            defaultValue={(cfg.targetCatId as number | undefined) ?? v?.FK_CatID ?? ""}
-          >
-            <option value="">— Choose a category —</option>
-            {categories.map((c) => (
-              <option key={c.CatID} value={c.CatID}>
-                #{c.CatID} {c.CatName}
-              </option>
-            ))}
-          </select>
-        </div>
+        {articleMode === "single" ? (
+          <>
+            <div className="form-row">
+              <label htmlFor="SeedQuery">Seed topic *</label>
+              <div>
+                <input
+                  id="SeedQuery"
+                  type="text"
+                  name="SeedQuery"
+                  defaultValue={(cfg.seedQuery as string | undefined) ?? ""}
+                  placeholder="e.g. AI productivity tools"
+                />
+                <small>The seed Google Trends will use to find related trending queries.</small>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <label htmlFor="TargetCatID">Target site category *</label>
+              <select
+                id="TargetCatID"
+                name="TargetCatID"
+                defaultValue={(cfg.targetCatId as number | undefined) ?? v?.FK_CatID ?? ""}
+              >
+                <option value="">— Choose a category —</option>
+                {categories.map((c) => (
+                  <option key={c.CatID} value={c.CatID}>
+                    #{c.CatID} {c.CatName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="form-row">
+              <label htmlFor="MaxCategoriesPerTick">Categories per refill</label>
+              <div>
+                <input
+                  id="MaxCategoriesPerTick"
+                  type="number"
+                  name="MaxCategoriesPerTick"
+                  min={1}
+                  max={30}
+                  defaultValue={(cfg.maxCategoriesPerTick as number | undefined) ?? 8}
+                />
+                <small>
+                  How many active categories to seed SerpAPI with on each refill.
+                  Each one consumes a SerpAPI call — keep this within your quota.
+                </small>
+              </div>
+            </div>
+            <div className="form-row">
+              <label htmlFor="PerCategoryTrendLimit">Trends per category</label>
+              <div>
+                <input
+                  id="PerCategoryTrendLimit"
+                  type="number"
+                  name="PerCategoryTrendLimit"
+                  min={3}
+                  max={25}
+                  defaultValue={(cfg.perCategoryTrendLimit as number | undefined) ?? 8}
+                />
+                <small>
+                  Trends fetched per category; the meta AI then picks the strongest
+                  ones across the pool and routes each idea to its best-fit category.
+                </small>
+              </div>
+            </div>
+            <div className="form-row" style={{ alignItems: "flex-start" }}>
+              <label>How it works</label>
+              <small style={{ color: "#475569", lineHeight: 1.45 }}>
+                Each category's keywords (or name) seed a SerpAPI trend lookup.
+                All trends are pooled and sent — tagged with their origin category —
+                to the meta AI, which rewrites each into an editorial title and
+                picks the best <code>categoryId</code> for it. Drafts land in the
+                category the AI chose, not necessarily where the trend came from.
+              </small>
+            </div>
+          </>
+        )}
 
         <div className="form-row">
           <label htmlFor="IdeationBatchCount">Articles per ideation batch</label>
@@ -377,6 +463,26 @@ export function CronJobFields({
         </div>
 
         <div className="form-row">
+          <label htmlFor="TrendsWindow">Trends window</label>
+          <div>
+            <select
+              id="TrendsWindow"
+              name="TrendsWindow"
+              defaultValue={(cfg.trendsWindow as string | undefined) ?? "now 7-d"}
+            >
+              {TRENDS_WINDOWS.map((w) => (
+                <option key={w.value} value={w.value}>{w.label}</option>
+              ))}
+            </select>
+            <small>
+              {TRENDS_WINDOWS.find(
+                (w) => w.value === ((cfg.trendsWindow as string | undefined) ?? "now 7-d"),
+              )?.hint ?? ""}
+            </small>
+          </div>
+        </div>
+
+        <div className="form-row">
           <label htmlFor="Guidance">Tone / angle (optional)</label>
           <textarea
             id="Guidance"
@@ -398,6 +504,27 @@ export function CronJobFields({
             />
             When pending drafts hit zero, automatically refill on the next tick
           </label>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="PublishStaggerMinutes">Publish gap (minutes)</label>
+          <div>
+            <input
+              id="PublishStaggerMinutes"
+              type="number"
+              name="PublishStaggerMinutes"
+              min={0}
+              max={120}
+              step={1}
+              defaultValue={(cfg.publishStaggerMinutes as number | undefined) ?? 15}
+            />
+            <small>
+              Minutes between PublishDate timestamps of articles inserted in
+              the same tick. 15 = each new piece looks 15 minutes older than
+              the previous, so a batch trickles in instead of clustering. Set
+              0 to publish all at the same instant.
+            </small>
+          </div>
         </div>
       </Section>
       ) : null}

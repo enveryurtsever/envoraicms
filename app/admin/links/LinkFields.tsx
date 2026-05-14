@@ -1,7 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { LinkRow } from "@/lib/types";
-import { RichTextEditor } from "@/components/admin-ui/RichTextEditor";
+
+// Same lazy pattern as AuthorFields — keeps the editor chunk out of the
+// /admin/links initial bundle until the modal opens.
+const RichTextEditor = dynamic(
+  () =>
+    import("@/components/admin-ui/RichTextEditor").then((m) => ({
+      default: m.RichTextEditor,
+    })),
+  { ssr: false },
+);
 
 export function LinkFields({ value }: { value?: LinkRow }) {
   const v = value;

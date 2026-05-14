@@ -19,55 +19,91 @@ export type ArticleIdea = {
   imagePrompt?: string | null;
   slug?: string | null;
   trendQuery?: string | null;
+  /** Router mode: per-idea category override. Falls back to defaultCatId. */
+  catId?: number | null;
 };
 
-/** Bulk insert ideated drafts. Title duplicates within the same category are
- *  silently skipped (handled by the unique partial index on
- *  (FK_CatID, LOWER(Title))). Returns how many rows were actually inserted. */
+/** Bulk insert ideated drafts. Each idea may carry its own `catId` (router
+ *  mode); ideas without one fall back to `defaultCatId`. Title duplicates
+ *  within the same category are silently skipped (handled by the unique
+ *  partial index on (FK_CatID, LOWER(Title))). */
 export async function saveDraftBatch(args: {
   cronId: number | null;
-  catId: number;
+  defaultCatId: number | null;
   creatorId: number | null;
   ideas: ArticleIdea[];
 }): Promise<{ inserted: number; duplicates: number }> {
-  const { cronId, catId, creatorId, ideas } = args;
-  let inserted = 0;
-  let duplicates = 0;
-  for (const idea of ideas) {
-    const title = idea.title.trim();
-    if (!title) {
-      duplicates += 1;
-      continue;
-    }
-    const rows = await sql<{ DraftID: string }[]>`
-      INSERT INTO "ArticleDrafts"
-        ("FK_CronID","FK_CatID","Title","Summary","Keywords","ImagePrompt",
-         "Slug","TrendQuery","Status","Fk_UserID")
-      VALUES
-        (${cronId}, ${catId},
-         ${title},
-         ${idea.summary ?? null},
-         ${idea.keywords ?? null},
-         ${idea.imagePrompt ?? null},
-         ${idea.slug ?? null},
-         ${idea.trendQuery ?? null},
-         'pending',
-         ${creatorId})
-      ON CONFLICT DO NOTHING
-      RETURNING "DraftID"::text AS "DraftID"
-    `;
-    if (rows.length > 0) inserted += 1;
-    else duplicates += 1;
-  }
-  return { inserted, duplicates };
+  const { cronId, defaultCatId, creatorId, ideas } = args;
+
+  const rows = ideas
+    .map((idea) => {
+      const title = idea.title.trim();
+      const catId = idea.catId ?? defaultCatId;
+      if (!title || !catId) return null;
+      return {
+        FK_CronID: cronId,
+        FK_CatID: catId,
+        Title: title,
+        Summary: idea.summary ?? null,
+        Keywords: idea.keywords ?? null,
+        ImagePrompt: idea.imagePrompt ?? null,
+        Slug: idea.slug ?? null,
+        TrendQuery: idea.trendQuery ?? null,
+        Status: "pending",
+        Fk_UserID: creatorId,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  const invalid = ideas.length - rows.length;
+  if (rows.length === 0) return { inserted: 0, duplicates: invalid };
+
+  // Single multi-row INSERT — was N round-trips for N ideas. ON CONFLICT
+  // skips title dupes (idx_articledrafts_cat_title), and RETURNING gives us
+  // the actual insert count regardless of dupes. Cast: the postgres-js
+  // bulk-insert helper signature isn't exposed by the local sql proxy type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const helper = (sql as any)(
+    rows,
+    "FK_CronID",
+    "FK_CatID",
+    "Title",
+    "Summary",
+    "Keywords",
+    "ImagePrompt",
+    "Slug",
+    "TrendQuery",
+    "Status",
+    "Fk_UserID",
+  );
+  const inserted = await sql<{ DraftID: string }[]>`
+    INSERT INTO "ArticleDrafts" ${helper}
+    ON CONFLICT DO NOTHING
+    RETURNING "DraftID"::text AS "DraftID"
+  `;
+
+  return {
+    inserted: inserted.length,
+    duplicates: invalid + (rows.length - inserted.length),
+  };
 }
 
-export async function listRecentArticleDrafts(limit = 100): Promise<ArticleDraft[]> {
+export async function listRecentArticleDrafts(
+  limit = 100,
+  offset = 0,
+): Promise<ArticleDraft[]> {
   return sql<ArticleDraft[]>`
     SELECT ${COLS} FROM "ArticleDrafts"
     ORDER BY "CreatedAt" DESC
-    LIMIT ${limit}
+    LIMIT ${limit} OFFSET ${offset}
   `;
+}
+
+export async function countAllArticleDrafts(): Promise<number> {
+  const rows = await sql<{ c: number }[]>`
+    SELECT COUNT(*)::int AS c FROM "ArticleDrafts"
+  `;
+  return rows[0]?.c ?? 0;
 }
 
 export async function listPendingArticleDrafts(args: {
@@ -177,4 +213,40 @@ export async function recentTitlesForCategory(
     LIMIT ${limit}
   `;
   return [...fromContents, ...fromDrafts].map((r) => r.Title).filter(Boolean);
+}
+
+/** Router-mode dedupe hint: recent titles for a SET of categories at once,
+ *  capped per category so the prompt stays compact. */
+export async function recentTitlesForCategoryMap(
+  catIds: number[],
+  perCategoryLimit = 30,
+): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>();
+  if (catIds.length === 0) return out;
+  for (const id of catIds) out.set(id, []);
+
+  const cap = Math.max(5, Math.min(100, perCategoryLimit));
+  const rows = await sql<{ FK_CatID: number; Title: string }[]>`
+    SELECT "FK_CatID", "Title"
+    FROM (
+      SELECT "FK_CatID", "ContentTitle" AS "Title", "CreatedDate" AS "ts",
+             ROW_NUMBER() OVER (PARTITION BY "FK_CatID" ORDER BY "CreatedDate" DESC) AS rn
+      FROM "Contents"
+      WHERE "FK_CatID" = ANY(${catIds}) AND "IsDeleted" = FALSE
+      UNION ALL
+      SELECT "FK_CatID", "Title", "CreatedAt" AS "ts",
+             ROW_NUMBER() OVER (PARTITION BY "FK_CatID" ORDER BY "CreatedAt" DESC) AS rn
+      FROM "ArticleDrafts"
+      WHERE "FK_CatID" = ANY(${catIds}) AND "Status" IN ('pending','processing','done')
+    ) t
+    WHERE rn <= ${cap}
+    ORDER BY "FK_CatID", "ts" DESC
+  `;
+  for (const r of rows) {
+    if (!r.Title) continue;
+    const list = out.get(r.FK_CatID);
+    if (!list) continue;
+    if (list.length < cap) list.push(r.Title);
+  }
+  return out;
 }

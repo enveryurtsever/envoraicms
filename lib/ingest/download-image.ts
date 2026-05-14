@@ -61,7 +61,9 @@ export async function downloadAndStoreImage(args: {
   if (buf.byteLength > MAX_BYTES) throw new Error("file too large");
 
   const dir = join(UPLOAD_ROOT, bucket);
+  const thumbDir = join(dir, "thumb");
   await mkdir(dir, { recursive: true });
+  await mkdir(thumbDir, { recursive: true });
 
   const cleanSlug =
     (slug || bucket)
@@ -72,12 +74,24 @@ export async function downloadAndStoreImage(args: {
   const ts = Date.now();
   const filename = `${cleanSlug}-${ts}.webp`;
 
-  const out = await sharp(buf, { failOn: "none" })
-    .rotate()
+  // Re-decode for each variant so .resize() can scale from the original
+  // — chaining a single sharp pipeline through two .toBuffer() calls is
+  // unsupported and would produce two copies at the same width.
+  const base = sharp(buf, { failOn: "none" }).rotate();
+
+  const fullBuf = await base
+    .clone()
     .resize({ width: args.maxWidth ?? 1600, withoutEnlargement: true })
     .webp({ quality: args.quality ?? 82, effort: 6 })
     .toBuffer();
 
-  await writeFile(join(dir, filename), out);
+  const thumbBuf = await base
+    .clone()
+    .resize({ width: 600, withoutEnlargement: true })
+    .webp({ quality: 78, effort: 6 })
+    .toBuffer();
+
+  await writeFile(join(dir, filename), fullBuf);
+  await writeFile(join(thumbDir, filename), thumbBuf);
   return `/Upload/${bucket}/${filename}`;
 }

@@ -5,7 +5,7 @@ import { getPreflight } from "@/lib/queries/preflight";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { CronJobsClient } from "./CronJobsClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Automation" };
 
 export default function CronJobsPage() {
   return (

@@ -45,38 +45,27 @@ export async function fetchNewsNow(
     page: params.page ?? 1,
   };
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30_000);
-  let res: Response;
-  try {
-    res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-rapidapi-host": HOST,
-        "x-rapidapi-key": key.plaintext,
-      },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  const res = await fetchWithRetry(body, key.plaintext);
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`NewsNow ${res.status}: ${text.slice(0, 300)}`);
+    // Include the request body so a 400 from RapidAPI is debuggable from the
+    // admin trigger toast without having to dig through server logs.
+    throw new Error(
+      `NewsNow ${res.status} (POST ${ENDPOINT}, body=${JSON.stringify(body)}): ${text.slice(0, 300)}`,
+    );
   }
   const json = (await res.json().catch(() => null)) as unknown;
 
-  // NewsNow's payload is { news: [...] } in current docs but tolerate both.
-  const list = Array.isArray(json)
-    ? json
-    : isObject(json) && Array.isArray((json as { news?: unknown }).news)
-      ? ((json as { news: unknown[] }).news)
-      : isObject(json) && Array.isArray((json as { data?: unknown }).data)
-        ? ((json as { data: unknown[] }).data)
-        : [];
+  const list = extractArticleList(json);
+  if (list.length === 0 && isObject(json)) {
+    // Surface unexpected payload shapes — the admin can see which keys came
+    // back and adjust the parser if RapidAPI's schema changes.
+    const keys = Object.keys(json).slice(0, 8).join(",");
+    throw new Error(
+      `NewsNow returned no articles. Top-level keys: [${keys}]. Raw: ${JSON.stringify(json).slice(0, 300)}`,
+    );
+  }
 
   const articles = list
     .map(toArticle)
@@ -86,6 +75,79 @@ export async function fetchNewsNow(
     return articles.slice(0, params.limit);
   }
   return articles;
+}
+
+/** Retries on timeout and 5xx — RapidAPI's NewsNow endpoint occasionally
+ *  stalls past a minute on large categories like TECHNOLOGY. 4xx is returned
+ *  as-is so the caller can surface the body in the error toast. */
+async function fetchWithRetry(
+  body: Record<string, unknown>,
+  apiKey: string,
+): Promise<Response> {
+  const TIMEOUT_MS = 60_000;
+  const MAX_ATTEMPTS = 3;
+  const BACKOFF_MS = [2_000, 5_000];
+
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-rapidapi-host": HOST,
+          "x-rapidapi-key": apiKey,
+        },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await sleep(BACKOFF_MS[attempt - 1]);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      const timedOut = ctrl.signal.aborted;
+      if (attempt >= MAX_ATTEMPTS) {
+        if (timedOut) {
+          throw new Error(
+            `NewsNow request timed out after ${TIMEOUT_MS / 1000}s on all ${MAX_ATTEMPTS} attempts (POST ${ENDPOINT}, body=${JSON.stringify(body)}).`,
+          );
+        }
+        throw err;
+      }
+      await sleep(BACKOFF_MS[attempt - 1]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  // Unreachable — loop either returns or throws — but TS needs it.
+  throw lastErr instanceof Error ? lastErr : new Error("NewsNow fetch failed");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** NewsNow's wrapper key has shifted historically. Accept any of the common
+ *  shapes so a schema tweak on RapidAPI's side doesn't silently zero us out. */
+function extractArticleList(json: unknown): unknown[] {
+  if (Array.isArray(json)) return json;
+  if (!isObject(json)) return [];
+  for (const key of ["news", "data", "articles", "results", "items"] as const) {
+    const v = (json as Record<string, unknown>)[key];
+    if (Array.isArray(v)) return v;
+    if (isObject(v)) {
+      for (const inner of ["news", "articles", "results", "items"] as const) {
+        const iv = (v as Record<string, unknown>)[inner];
+        if (Array.isArray(iv)) return iv;
+      }
+    }
+  }
+  return [];
 }
 
 /** Stable de-dup key — prefer URL since NewsNow doesn't always include an id. */
@@ -102,28 +164,42 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+function pickString(raw: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = raw[k];
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  return null;
+}
+
 function toArticle(raw: unknown): NewsNowArticle | null {
   if (!isObject(raw)) return null;
-  const title = typeof raw.title === "string" ? raw.title : null;
-  const url = typeof raw.url === "string" ? raw.url : null;
+  const title = pickString(raw, ["title", "headline", "name"]);
+  const url = pickString(raw, ["url", "link", "href", "webUrl"]);
   if (!title || !url) return null;
+  const publisher = isObject(raw.publisher)
+    ? {
+        name: pickString(raw.publisher, ["name", "title"]),
+        url: pickString(raw.publisher, ["url", "link", "href"]),
+      }
+    : isObject(raw.source)
+      ? {
+          name: pickString(raw.source, ["name", "title"]),
+          url: pickString(raw.source, ["url", "link", "href"]),
+        }
+      : null;
   const article: NewsNowArticle = {
     ...raw,
     title,
     url,
-    excerpt: typeof raw.excerpt === "string" ? raw.excerpt : null,
-    top_image: typeof raw.top_image === "string" ? raw.top_image : null,
-    date: typeof raw.date === "string" ? raw.date : null,
+    excerpt: pickString(raw, ["excerpt", "description", "summary", "snippet"]),
+    top_image: pickString(raw, ["top_image", "image", "urlToImage", "thumbnail"]),
+    date: pickString(raw, ["date", "publishedAt", "pubDate", "published"]),
     authors: Array.isArray(raw.authors)
       ? raw.authors.filter((a): a is string => typeof a === "string")
       : null,
-    publisher: isObject(raw.publisher)
-      ? {
-          name: typeof raw.publisher.name === "string" ? raw.publisher.name : null,
-          url: typeof raw.publisher.url === "string" ? raw.publisher.url : null,
-        }
-      : null,
-    text: typeof raw.text === "string" ? raw.text : null,
+    publisher,
+    text: pickString(raw, ["text", "content", "body", "articleBody"]),
   };
   return article;
 }

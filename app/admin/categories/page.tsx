@@ -3,10 +3,10 @@ import { listAllCategories } from "@/lib/queries/admin-categories";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { CategoriesClient } from "./CategoriesClient";
 
-export const dynamic = "force-dynamic";
-
 /** Shell + Suspense — page paints instantly with a skeleton; the client
  *  table swaps in once `listAllCategories` resolves. */
+export const metadata = { title: "Categories" };
+
 export default function CategoriesPage() {
   return (
     <Suspense

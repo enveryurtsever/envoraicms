@@ -3,7 +3,7 @@ import { listAdZones } from "@/lib/queries/adzones";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { AdsClient } from "./AdsClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Ads" };
 
 export default function AdsPage() {
   return (

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import type { CronJob } from "@/lib/types";
 import type { IngestCategory, PipelineOutcome } from "@/lib/ingest/types";
 import { assertPreflightOk } from "@/lib/queries/preflight";
+import { buildAuthorPicker } from "@/lib/queries/authors";
 import { ideateForJob } from "./article-ideation";
 import { expandArticleDraft } from "./article-expand";
 import {
@@ -15,12 +16,15 @@ import {
 
 /** One tick of an Article-kind cron job:
  *   1. If pending=0 and (autoRefill || forceRefill): ideate a fresh batch.
- *   2. Expand min(ArticlesPerRun, pending) drafts → Contents rows. */
+ *      Skipped entirely when refillIfEmpty=false (used by the scheduler's
+ *      every-minute drain pass — refill stays bound to the cron schedule).
+ *   2. Expand all pending drafts → Contents rows with future PublishDates. */
 export async function runArticleJobTick(args: {
   job: CronJob;
   forceRefill?: boolean;
+  refillIfEmpty?: boolean;
 }): Promise<PipelineOutcome> {
-  const { job, forceRefill = false } = args;
+  const { job, forceRefill = false, refillIfEmpty = true } = args;
   const log: string[] = [];
   const result: PipelineOutcome = { inserted: 0, skipped: 0, errored: 0, log };
 
@@ -30,10 +34,20 @@ export async function runArticleJobTick(args: {
     throw new Error(`runArticleJobTick called on non-article job (Kind=${job.Kind})`);
   }
   const cfg = job.Config ?? {};
-  const targetCatId = typeof cfg.targetCatId === "number" ? cfg.targetCatId : null;
-  if (!targetCatId) throw new Error("Article job missing targetCatId in Config");
-  const cat = await loadCategory(targetCatId);
-  if (!cat) throw new Error(`Target category #${targetCatId} not active`);
+  const routerMode = cfg.routerMode === true;
+  const targetCatId =
+    typeof cfg.targetCatId === "number" ? cfg.targetCatId : null;
+  if (!routerMode && !targetCatId) {
+    throw new Error("Article job missing targetCatId in Config");
+  }
+  // In single-cat mode we keep one preloaded category; router mode resolves
+  // per-draft below since drafts may belong to any active category.
+  const fixedCat = routerMode
+    ? null
+    : await loadCategory(targetCatId as number);
+  if (!routerMode && !fixedCat) {
+    throw new Error(`Target category #${targetCatId} not active`);
+  }
   const imageProvider: "passthrough" | "falai" =
     job.ImageAiProvider === "falai" ? "falai" : "passthrough";
 
@@ -42,7 +56,7 @@ export async function runArticleJobTick(args: {
   log.push(`[article#${job.CronID}] pending=${pending}`);
 
   if (pending === 0) {
-    if (forceRefill || cfg.autoRefill) {
+    if (forceRefill || (refillIfEmpty && cfg.autoRefill)) {
       try {
         const refill = await ideateForJob({ job, log });
         log.push(
@@ -61,19 +75,41 @@ export async function runArticleJobTick(args: {
     }
   }
 
-  // Step 2 — expand up to ArticlesPerRun drafts.
-  const limit = Math.max(1, job.ArticlesPerRun || 1);
-  const drafts = await listPendingArticleDrafts({ cronId: job.CronID, limit });
+  // Step 2 — expand ALL pending drafts in this tick. Each gets a future
+  // PublishDate spaced by `publishStaggerMinutes` — the activator then
+  // flips IsActive=TRUE as each scheduled time arrives. ArticlesPerRun is
+  // intentionally not used here: it's the ideation batch size, not a cap
+  // on expansion. Capping expansion would leave drafts un-scheduled.
+  const publishStagger = Math.max(
+    0,
+    typeof cfg.publishStaggerMinutes === "number" ? cfg.publishStaggerMinutes : 15,
+  );
+  // High cap (50) is a safety net so a runaway ideation can't hang one tick
+  // forever. ideationBatchCount is clamped to 50 elsewhere, so in practice
+  // this matches the largest plausible refill.
+  const [drafts, pickAuthor] = await Promise.all([
+    listPendingArticleDrafts({ cronId: job.CronID, limit: 50 }),
+    buildAuthorPicker(),
+  ]);
 
   for (const candidate of drafts) {
     const draft = await claimArticleDraft(candidate.DraftID);
     if (!draft) continue;
     try {
+      const draftCat =
+        fixedCat && draft.FK_CatID === fixedCat.CatID
+          ? fixedCat
+          : await loadCategory(draft.FK_CatID);
+      if (!draftCat) {
+        throw new Error(`Draft category #${draft.FK_CatID} not active`);
+      }
       const contentId = await expandArticleDraft({
         draft,
-        category: cat,
+        category: draftCat,
         imageProvider,
         log,
+        pickAuthor,
+        staggerMinutes: result.inserted * publishStagger,
       });
       await markArticleDone({ id: draft.DraftID, contentId });
       result.inserted += 1;

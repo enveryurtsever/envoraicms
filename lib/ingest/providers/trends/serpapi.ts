@@ -9,6 +9,22 @@ export type TrendItem = {
 
 const ENDPOINT = "https://serpapi.com/search.json";
 
+/** SerpAPI `date` enum for the google_trends engine. Without this argument the
+ *  upstream defaults to "today 12-m" (past 12 months), which surfaces stale,
+ *  evergreen-feeling queries instead of what readers are actually searching
+ *  for right now. We default to "now 7-d" so titles ride the past week. */
+export type TrendsWindow =
+  | "now 1-H"
+  | "now 4-H"
+  | "now 1-d"
+  | "now 7-d"
+  | "today 1-m"
+  | "today 3-m"
+  | "today 12-m"
+  | "today 5-y";
+
+const DEFAULT_WINDOW: TrendsWindow = "now 7-d";
+
 /** Fetches trending queries related to a seed via SerpAPI's google_trends
  *  engine (data_type=RELATED_QUERIES). Falls back to google_trends_trending_now
  *  if the related-queries response is empty.
@@ -19,12 +35,14 @@ export async function fetchRelatedTrends(args: {
   location?: string;   // ISO-2 country, default "us"
   language?: string;   // ISO-2 language, default "en"
   limit?: number;      // default 25
+  window?: TrendsWindow; // SerpAPI date enum, default "now 7-d"
 }): Promise<TrendItem[]> {
   const seed = args.seed.trim();
   if (!seed) return [];
   const limit = Math.max(1, Math.min(50, args.limit ?? 25));
   const country = (args.location ?? "us").toLowerCase();
   const lang = (args.language ?? "en").toLowerCase();
+  const window = args.window ?? DEFAULT_WINDOW;
 
   const key = await requireApiKey("serpapi", "trends_source");
 
@@ -35,11 +53,12 @@ export async function fetchRelatedTrends(args: {
     data_type: "RELATED_QUERIES",
     geo: country.toUpperCase(),
     hl: lang,
+    date: window,
   });
   const fromRelated = parseRelatedQueries(related, limit);
   if (fromRelated.length > 0) return fromRelated;
 
-  // 2) Fallback: trending now in the same geo.
+  // 2) Fallback: trending now in the same geo (this engine ignores `date`).
   const trending = await callSerpApi(key.plaintext, {
     engine: "google_trends_trending_now",
     geo: country.toUpperCase(),

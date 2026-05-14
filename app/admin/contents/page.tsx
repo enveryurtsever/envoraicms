@@ -6,22 +6,17 @@ import {
 } from "@/lib/queries/admin-contents";
 import { listAllCategories } from "@/lib/queries/admin-categories";
 import { FilterBarSkeleton, TableSkeleton } from "@/components/admin-ui/Skeletons";
+import { RowDeleteButton } from "@/components/admin-ui/RowDeleteButton";
+import { LocalDate } from "@/components/admin-ui/LocalDate";
+import { IconExternalLink } from "@/components/admin-ui/Icon";
 import { deleteContentAction } from "./actions";
-
-export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 30;
 
-function fmt(d: Date | string): string {
-  const x = typeof d === "string" ? new Date(d) : d;
-  return x.toLocaleString(undefined, {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
-
 /** Page returns the static shell synchronously — header + Suspense fallback
  *  paint immediately on click. Data sections stream in behind Suspense. */
+export const metadata = { title: "Articles" };
+
 export default async function ContentsPage({
   searchParams,
 }: {
@@ -133,14 +128,52 @@ async function ContentsTable({
               <tr key={c.ContentID}>
                 <td>{c.ContentID}</td>
                 <td>
-                  <div style={{ fontWeight: 500 }}>{c.ContentTitle}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <Link
+                      href={`/admin/contents/${c.ContentID}/edit`}
+                      style={{
+                        fontWeight: 500,
+                        color: "inherit",
+                        textDecoration: "none",
+                      }}
+                      title="Edit article"
+                    >
+                      {c.ContentTitle}
+                    </Link>
+                    {c.CatSeo && c.ContentSeo ? (
+                      <a
+                        href={`/${c.CatSeo}/${c.ContentSeo}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open on site"
+                        aria-label="Open on site"
+                        style={{
+                          color: "#64748b",
+                          display: "inline-flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <IconExternalLink size={14} />
+                      </a>
+                    ) : null}
+                  </div>
                   <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
                     <code>{c.ContentSeo}</code>
-                    {c.Homepage ? <span className="badge ok" style={{ marginLeft: 6 }}>HP</span> : null}
+                    {c.Homepage ? (
+                      <span
+                        className="badge ok"
+                        style={{ marginLeft: 6 }}
+                        title="Featured on the homepage"
+                      >
+                        HP
+                      </span>
+                    ) : null}
                   </div>
                 </td>
                 <td>{c.CatName}</td>
-                <td style={{ fontSize: "0.75rem" }}>{fmt(c.PublishDate)}</td>
+                <td style={{ fontSize: "0.75rem" }}>
+                  <LocalDate value={c.PublishDate} />
+                </td>
                 <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                   {c.ViewCount.toLocaleString(undefined)}
                 </td>
@@ -158,12 +191,13 @@ async function ContentsTable({
                   >
                     Edit
                   </Link>{" "}
-                  <form action={deleteContentAction} style={{ display: "inline" }}>
-                    <input type="hidden" name="id" value={c.ContentID} />
-                    <button type="submit" className="btn danger small">
-                      Delete
-                    </button>
-                  </form>
+                  <RowDeleteButton
+                    action={deleteContentAction}
+                    id={c.ContentID}
+                    confirmTitle={`Delete "${c.ContentTitle}"?`}
+                    confirmDescription="The article will be soft-deleted and unpublished."
+                    successMessage="Article deleted"
+                  />
                 </td>
               </tr>
             ))}

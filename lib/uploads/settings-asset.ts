@@ -103,7 +103,12 @@ export async function saveMediaAsset(
   }
 
   const dir = join(UPLOAD_DIR, bucket);
+  const thumbDir = join(dir, "thumb");
   await mkdir(dir, { recursive: true });
+  // Card grids on the public site read /Upload/<bucket>/thumb/<file> via
+  // contentThumb(); without this directory the smaller variant 404s and the
+  // browser falls back to the broken-image glyph.
+  await mkdir(thumbDir, { recursive: true });
 
   const slug = (slugHint ?? "")
     .toLowerCase()
@@ -116,12 +121,21 @@ export async function saveMediaAsset(
   const filename = `${slug}-${ts}.webp`;
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const out = await sharp(buf, { failOn: "none" })
-    .rotate()
+  const base = sharp(buf, { failOn: "none" }).rotate();
+
+  const fullBuf = await base
+    .clone()
     .resize({ width: preset.maxWidth, withoutEnlargement: true })
     .webp({ quality: preset.quality, effort: 6 })
     .toBuffer();
 
-  await writeFile(join(dir, filename), out);
+  const thumbBuf = await base
+    .clone()
+    .resize({ width: 600, withoutEnlargement: true })
+    .webp({ quality: 78, effort: 6 })
+    .toBuffer();
+
+  await writeFile(join(dir, filename), fullBuf);
+  await writeFile(join(thumbDir, filename), thumbBuf);
   return `/Upload/${bucket}/${filename}`;
 }

@@ -11,8 +11,9 @@ export async function GET() {
       { status: ok ? 200 : 503 }
     );
   } catch (err) {
+    console.error("[health] db check failed:", err);
     return Response.json(
-      { status: "error", db: false, error: (err as Error).message, ts: new Date().toISOString() },
+      { status: "error", db: false, ts: new Date().toISOString() },
       { status: 503 }
     );
   }

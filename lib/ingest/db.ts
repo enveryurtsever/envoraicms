@@ -1,6 +1,11 @@
 import "server-only";
 import { sql } from "@/lib/db";
-import type { IngestCategory, Rewritten, SourceArticle } from "./types";
+import type {
+  IngestCategory,
+  Rewritten,
+  RoutableCategory,
+  SourceArticle,
+} from "./types";
 
 export async function alreadyIngested(sourceUrl: string): Promise<boolean> {
   const rows = await sql<{ c: number }[]>`
@@ -106,4 +111,24 @@ export async function getIngestCategory(catId: number): Promise<IngestCategory |
     LIMIT 1
   `;
   return rows[0] ?? null;
+}
+
+/** Active categories that the article router can seed trend lookups for and
+ *  let the meta-AI route ideas into. Skips categories with neither keywords
+ *  nor a usable name (defensive — the seed must produce something searchable).
+ *  Order: CatNumber ASC then CatID — same as header rendering. */
+export async function listActiveRoutableCategories(
+  limit?: number,
+): Promise<RoutableCategory[]> {
+  const cap = Math.max(1, Math.min(100, limit ?? 50));
+  return sql<RoutableCategory[]>`
+    SELECT "CatID","CatName","CatSeo","CatKeywords","CatDesc"
+    FROM "Categories"
+    WHERE "IsActive" = TRUE
+      AND "IsDeleted" = FALSE
+      AND "CatName" IS NOT NULL
+      AND "CatSeo" IS NOT NULL
+    ORDER BY "CatNumber" ASC NULLS LAST, "CatID" ASC
+    LIMIT ${cap}
+  `;
 }

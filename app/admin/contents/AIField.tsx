@@ -1,10 +1,21 @@
 "use client";
 
 import { useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import type { SuggestField } from "@/lib/ingest/ai/suggest";
 import { Tooltip } from "@/components/admin-ui/Tooltip";
 import { IconWand } from "@/components/admin-ui/Icon";
-import { RichTextEditor } from "@/components/admin-ui/RichTextEditor";
+
+// Editor's contenteditable bindings + exec helpers are ~3KB minified, but
+// only used on edit/new pages where `rich` is true. Dynamic import keeps
+// the chunk out of routes that import AIField for non-rich fields.
+const RichTextEditor = dynamic(
+  () =>
+    import("@/components/admin-ui/RichTextEditor").then((m) => ({
+      default: m.RichTextEditor,
+    })),
+  { ssr: false },
+);
 
 type Props = {
   fieldKey: SuggestField;

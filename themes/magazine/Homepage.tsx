@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { SafeImage as Image } from "@/components/SafeImage";
 import Link from "next/link";
 import { ArticleCard } from "@/components/ArticleCard";
 import { AdSlot } from "@/components/AdSlot";
@@ -9,111 +9,86 @@ import {
   getPerCategoryLatest,
   getTopTags,
 } from "@/lib/queries/contents";
-import { contentThumb, formatDate, truncate } from "@/lib/utils";
+import { getDefaultCover } from "@/lib/queries/settings";
+import type { ContentListItem } from "@/lib/types";
+import { contentThumb, formatRelativeShort, truncate } from "@/lib/utils";
 
 export default async function MagazineHomepage() {
   const [featured, tags] = await Promise.all([
-    getHomepageFeatured(10),
+    getHomepageFeatured(7),
     getTopTags(12),
   ]);
 
-  const cover = featured[0];
-  const secondary = featured.slice(1, 5);
-  const sidebar = featured.slice(5, 10);
-  const topIds = featured.map((i) => i.ContentID);
+  // 3-column hero: small column (3) | big center (1) | small column (3).
+  const center = featured[0];
+  const left = featured.slice(1, 4);
+  const right = featured.slice(4, 7);
+  const usedIds = featured.map((i) => i.ContentID);
 
-  const latest = await getLatestExcluding(topIds, 10);
+  const latest = await getLatestExcluding(usedIds, 8);
   const perCategory = await getPerCategoryLatest(
     3,
-    [...topIds, ...latest.map((i) => i.ContentID)],
+    [...usedIds, ...latest.map((i) => i.ContentID)],
   );
 
   return (
     <>
       <AdSlot name="leaderboard-top" className="mb-6" />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
-        <div className="min-w-0">
-          {cover ? (
-            <Link href={`/${cover.CatSeo}/${cover.ContentSeo}`} className="group block">
-              <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-neutral-200">
-                <Image
-                  src={contentThumb(cover.ContentImage) || "/Upload/envoraicms_cover.jpg"}
-                  alt={cover.ContentTitle}
-                  fill
-                  priority
-                  sizes="(min-width: 1024px) 720px, 100vw"
-                  className="object-cover transition-transform duration-700 group-hover:scale-[1.02]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-                  <span className="mb-2 inline-block rounded bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                    {cover.CatName}
-                  </span>
-                  <h1 className="text-2xl font-bold leading-tight lg:text-3xl">
-                    {cover.ContentTitle}
-                  </h1>
-                  {cover.ContentShort ? (
-                    <p className="mt-2 hidden text-sm text-white/90 lg:block">
-                      {truncate(cover.ContentShort, 180)}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </Link>
+      {center ? (
+        <section
+          aria-label="Featured stories"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:auto-rows-[minmax(170px,1fr)]"
+        >
+          {left[0] ? (
+            <SmallOverlayCard
+              item={left[0]}
+              className="lg:col-start-1 lg:row-start-1"
+            />
+          ) : null}
+          {left[1] ? (
+            <SmallOverlayCard
+              item={left[1]}
+              className="lg:col-start-1 lg:row-start-2"
+            />
+          ) : null}
+          {left[2] ? (
+            <SmallOverlayCard
+              item={left[2]}
+              className="lg:col-start-1 lg:row-start-3"
+            />
           ) : null}
 
-          {secondary.length > 0 ? (
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {secondary.map((item) => (
-                <ArticleCard
-                  key={item.ContentID}
-                  item={item}
-                  variant="compact"
-                  sizes="(min-width: 1024px) 340px, 45vw"
-                />
-              ))}
-            </div>
+          <BigOverlayCard
+            item={center}
+            className="sm:col-span-2 lg:col-start-2 lg:col-span-2 lg:row-span-3"
+          />
+
+          {right[0] ? (
+            <SmallOverlayCard
+              item={right[0]}
+              className="lg:col-start-4 lg:row-start-1"
+            />
           ) : null}
-        </div>
-
-        <aside className="min-w-0 border-l border-neutral-200 pl-6">
-          <h2 className="mb-3 border-b-2 border-brand pb-1.5 text-sm font-bold uppercase tracking-[0.18em] text-brand">
-            Featured
-          </h2>
-          <ul className="divide-y divide-neutral-200">
-            {sidebar.map((item, idx) => (
-              <li key={item.ContentID} className="py-3 first:pt-0 last:pb-0">
-                <Link
-                  href={`/${item.CatSeo}/${item.ContentSeo}`}
-                  className="group flex gap-3"
-                >
-                  <span className="text-2xl font-black text-brand/30 group-hover:text-brand/60">
-                    {String(idx + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="line-clamp-3 text-sm font-semibold leading-snug text-navy group-hover:text-brand">
-                      {item.ContentTitle}
-                    </h3>
-                    {item.PublishDate ? (
-                      <time className="mt-1 block text-[11px] text-neutral-500">
-                        {formatDate(item.PublishDate)}
-                      </time>
-                    ) : null}
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-
-          <AdSlot name="sidebar-mpu" className="mt-6" />
-        </aside>
-      </div>
+          {right[1] ? (
+            <SmallOverlayCard
+              item={right[1]}
+              className="lg:col-start-4 lg:row-start-2"
+            />
+          ) : null}
+          {right[2] ? (
+            <SmallOverlayCard
+              item={right[2]}
+              className="lg:col-start-4 lg:row-start-3"
+            />
+          ) : null}
+        </section>
+      ) : null}
 
       {tags.length > 0 ? (
         <section
           aria-label="Trending topics"
-          className="mt-8 flex flex-wrap gap-2 border-y border-neutral-200 py-4"
+          className="mt-8 flex flex-wrap gap-2 border-y border-neutral-200 py-4 dark:border-neutral-700"
         >
           {tags.map((t) => (
             <TagPill key={t} tag={t} />
@@ -124,9 +99,9 @@ export default async function MagazineHomepage() {
       <AdSlot name="billboard" className="my-8" />
 
       {latest.length > 0 ? (
-        <section aria-label="Son haberler" className="mt-6">
+        <section aria-label="Latest news" className="mt-6">
           <h2 className="mb-4 border-b-2 border-brand pb-2 text-xl font-bold uppercase tracking-wider text-brand">
-            Son Haberler
+            Latest News
           </h2>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {latest.slice(0, 8).map((item) => (
@@ -143,7 +118,7 @@ export default async function MagazineHomepage() {
 
       {perCategory.length > 0 ? (
         <section
-          aria-label="Categoryler"
+          aria-label="Categories"
           className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3"
         >
           {perCategory.slice(0, 6).map((group) => {
@@ -165,12 +140,12 @@ export default async function MagazineHomepage() {
                   sizes="(min-width: 1024px) 360px, 45vw"
                 />
                 {rest.length > 0 ? (
-                  <ul className="mt-3 divide-y divide-neutral-200">
+                  <ul className="mt-3 divide-y divide-neutral-200 dark:divide-neutral-700">
                     {rest.map((item) => (
                       <li key={item.ContentID} className="py-2">
                         <Link
                           href={`/${item.CatSeo}/${item.ContentSeo}`}
-                          className="text-sm font-semibold leading-snug text-navy hover:text-brand"
+                          className="text-sm font-semibold leading-snug text-navy hover:text-brand dark:text-neutral-100"
                         >
                           {truncate(item.ContentTitle, 90)}
                         </Link>
@@ -186,5 +161,94 @@ export default async function MagazineHomepage() {
 
       <AdSlot name="leaderboard-bottom" className="mt-10" />
     </>
+  );
+}
+
+/* ---------------- shared cards (image fill + dark overlay) ---------------- */
+
+function TimeBadge({ date }: { date: string | Date }) {
+  return (
+    <span className="absolute left-3 top-3 z-10 rounded-sm bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white backdrop-blur-sm">
+      {formatRelativeShort(date)}
+    </span>
+  );
+}
+
+async function SmallOverlayCard({
+  item,
+  className,
+}: {
+  item: ContentListItem;
+  className?: string;
+}) {
+  const image = contentThumb(item.ContentImage) || (await getDefaultCover());
+  const href = `/${item.CatSeo}/${item.ContentSeo}`;
+  return (
+    <Link
+      href={href}
+      className={`group relative block overflow-hidden rounded-lg bg-neutral-900 ${className ?? ""}`}
+    >
+      <div className="relative h-full min-h-[180px] w-full">
+        <Image
+          src={image}
+          alt={item.ContentTitle}
+          fill
+          sizes="(min-width: 1024px) 320px, (min-width: 640px) 50vw, 100vw"
+          className="object-cover opacity-90 transition-transform duration-500 group-hover:scale-[1.04]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+      </div>
+      {item.PublishDate ? <TimeBadge date={item.PublishDate} /> : null}
+      <div className="absolute inset-x-0 bottom-0 p-4">
+        <h3 className="line-clamp-2 text-sm font-extrabold uppercase leading-tight tracking-tight text-white md:text-base">
+          {item.ContentTitle}
+        </h3>
+      </div>
+    </Link>
+  );
+}
+
+async function BigOverlayCard({
+  item,
+  className,
+}: {
+  item: ContentListItem;
+  className?: string;
+}) {
+  const image = contentThumb(item.ContentImage) || (await getDefaultCover());
+  const href = `/${item.CatSeo}/${item.ContentSeo}`;
+  return (
+    <Link
+      href={href}
+      className={`group relative block overflow-hidden rounded-lg bg-neutral-900 ${className ?? ""}`}
+    >
+      <div className="relative h-full min-h-[400px] w-full">
+        <Image
+          src={image}
+          alt={item.ContentTitle}
+          fill
+          priority
+          sizes="(min-width: 1024px) 640px, 100vw"
+          className="object-cover transition-transform duration-700 group-hover:scale-[1.02]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+      </div>
+      {item.PublishDate ? <TimeBadge date={item.PublishDate} /> : null}
+      <div className="absolute inset-x-0 bottom-0 p-5 md:p-7">
+        <h2 className="line-clamp-3 text-xl font-extrabold uppercase leading-tight tracking-tight text-white md:text-3xl lg:text-4xl">
+          {item.ContentTitle}
+        </h2>
+        <div className="mt-4 flex items-center gap-3 text-xs text-white/75">
+          <span className="rounded bg-brand/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+            {item.CatName}
+          </span>
+          {item.ContentShort ? (
+            <span className="hidden text-white/70 md:inline">
+              {truncate(item.ContentShort, 90)}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </Link>
   );
 }

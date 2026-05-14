@@ -17,6 +17,7 @@ export async function setColorPreferenceAction(formData: FormData): Promise<void
   c.set(COLOR_MODE_COOKIE, next, {
     httpOnly: false,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     maxAge: ONE_YEAR_SECONDS,
     path: "/",
   });

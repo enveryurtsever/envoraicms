@@ -1,11 +1,12 @@
-import Image from "next/image";
 import Link from "next/link";
 import type { ContentListItem } from "@/lib/types";
 import { contentThumb, formatDate, truncate } from "@/lib/utils";
+import { SafeImage } from "@/components/SafeImage";
+import { getDefaultCover } from "@/lib/queries/settings";
 
 type Variant = "hero" | "feature" | "grid" | "list" | "compact";
 
-export function ArticleCard({
+export async function ArticleCard({
   item,
   variant = "grid",
   priority = false,
@@ -17,13 +18,13 @@ export function ArticleCard({
   sizes?: string;
 }) {
   const href = `/${item.CatSeo}/${item.ContentSeo}`;
-  const image = contentThumb(item.ContentImage) || "/Upload/default-cover.jpg";
+  const image = contentThumb(item.ContentImage) || (await getDefaultCover());
 
   if (variant === "hero") {
     return (
       <Link href={href} className="group relative block overflow-hidden rounded-lg">
         <div className="relative aspect-[16/10] w-full bg-neutral-200">
-          <Image
+          <SafeImage
             src={image}
             alt={item.ContentTitle}
             fill
@@ -49,7 +50,7 @@ export function ArticleCard({
     return (
       <Link href={href} className="group relative block overflow-hidden rounded-lg">
         <div className="relative aspect-[16/10] w-full bg-neutral-200">
-          <Image
+          <SafeImage
             src={image}
             alt={item.ContentTitle}
             fill
@@ -74,7 +75,7 @@ export function ArticleCard({
     return (
       <Link href={href} className="group relative block overflow-hidden rounded">
         <div className="relative aspect-[4/3] w-full bg-neutral-200">
-          <Image
+          <SafeImage
             src={image}
             alt={item.ContentTitle}
             fill
@@ -97,9 +98,9 @@ export function ArticleCard({
 
   if (variant === "list") {
     return (
-      <Link href={href} className="group flex gap-4 border-b border-neutral-200 py-4 last:border-b-0">
+      <Link href={href} className="group flex gap-4 border-b border-neutral-200 py-4 last:border-b-0 dark:border-neutral-700">
         <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded bg-neutral-200 md:h-24 md:w-36">
-          <Image
+          <SafeImage
             src={image}
             alt={item.ContentTitle}
             fill
@@ -111,11 +112,11 @@ export function ArticleCard({
           <div className="text-[11px] font-bold uppercase tracking-wider text-brand">
             {item.CatName} {item.PublishDate ? <span className="text-neutral-400">— {formatDate(item.PublishDate)}</span> : null}
           </div>
-          <h3 className="mt-1 text-sm font-bold leading-snug text-neutral-900 group-hover:text-brand md:text-base">
+          <h3 className="mt-1 text-sm font-bold leading-snug text-neutral-900 group-hover:text-brand md:text-base dark:text-neutral-100">
             {item.ContentTitle}
           </h3>
           {item.ContentShort ? (
-            <p className="mt-1 line-clamp-2 text-xs text-neutral-600 md:text-sm">
+            <p className="mt-1 line-clamp-2 text-xs text-neutral-600 md:text-sm dark:text-neutral-400">
               {truncate(item.ContentShort, 180)}
             </p>
           ) : null}
@@ -128,7 +129,7 @@ export function ArticleCard({
   return (
     <Link href={href} className="group flex flex-col overflow-hidden">
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded bg-neutral-200">
-        <Image
+        <SafeImage
           src={image}
           alt={item.ContentTitle}
           fill

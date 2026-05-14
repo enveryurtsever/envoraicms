@@ -13,7 +13,7 @@ import {
 } from "@/components/admin-ui/Icon";
 import { RangeSelector } from "./RangeSelector";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Dashboard" };
 
 function statusBadge(status: string | null) {
   if (!status) return <span className="badge off">unknown</span>;

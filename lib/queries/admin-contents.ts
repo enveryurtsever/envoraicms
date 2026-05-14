@@ -1,11 +1,21 @@
 import "server-only";
 import { sql } from "@/lib/db";
-import type { Content, ContentListItem } from "@/lib/types";
+import type { Content } from "@/lib/types";
 
-export type AdminContentListItem = ContentListItem & {
+// Lean shape for the admin list table — drops ContentShort / ContentDesc /
+// ContentImage which the table doesn't render. Pulling those over the wire
+// for a 30-row page wastes serialization on multi-paragraph blobs.
+export type AdminContentListItem = {
+  ContentID: number;
+  FK_CatID: number;
+  ContentTitle: string;
+  ContentSeo: string;
+  PublishDate: string;
   IsActive: boolean;
   Homepage: boolean;
   ViewCount: number;
+  CatSeo: string;
+  CatName: string;
 };
 
 export async function listAdminContents({
@@ -23,9 +33,9 @@ export async function listAdminContents({
 } = {}): Promise<AdminContentListItem[]> {
   const pattern = q ? `%${q.replace(/[%_]/g, "\\$&")}%` : null;
   return sql<AdminContentListItem[]>`
-    SELECT c."ContentID", c."FK_CatID", c."ContentTitle", c."ContentShort",
-           c."ContentDesc", c."ContentImage", c."ContentSeo", c."PublishDate",
-           c."IsActive", c."Homepage", COALESCE(c."ViewCount", 0)::int AS "ViewCount",
+    SELECT c."ContentID", c."FK_CatID", c."ContentTitle", c."ContentSeo",
+           c."PublishDate", c."IsActive", c."Homepage",
+           COALESCE(c."ViewCount", 0)::int AS "ViewCount",
            cat."CatSeo", cat."CatName"
     FROM "Contents" c
     JOIN "Categories" cat ON cat."CatID" = c."FK_CatID"
@@ -33,7 +43,7 @@ export async function listAdminContents({
       ${includeInactive ? sql`` : sql`AND c."IsActive" = TRUE`}
       ${catId ? sql`AND c."FK_CatID" = ${catId}` : sql``}
       ${pattern
-        ? sql`AND (c."ContentTitle" ILIKE ${pattern} OR c."ContentDesc" ILIKE ${pattern} OR c."ContentSeo" ILIKE ${pattern})`
+        ? sql`AND (c."ContentTitle" ILIKE ${pattern} OR c."ContentSeo" ILIKE ${pattern})`
         : sql``}
     ORDER BY c."PublishDate" DESC, c."ContentID" DESC
     LIMIT ${limit} OFFSET ${offset}
@@ -51,7 +61,7 @@ export async function countAdminContents({
     WHERE c."IsDeleted" = FALSE
       ${catId ? sql`AND c."FK_CatID" = ${catId}` : sql``}
       ${pattern
-        ? sql`AND (c."ContentTitle" ILIKE ${pattern} OR c."ContentDesc" ILIKE ${pattern} OR c."ContentSeo" ILIKE ${pattern})`
+        ? sql`AND (c."ContentTitle" ILIKE ${pattern} OR c."ContentSeo" ILIKE ${pattern})`
         : sql``}
   `;
   return Number(rows[0]?.count ?? 0);

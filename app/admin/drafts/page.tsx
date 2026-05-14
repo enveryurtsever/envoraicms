@@ -11,11 +11,20 @@ import { listAllCategories } from "@/lib/queries/admin-categories";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { DraftsTabbed } from "./DraftsTabbed";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Drafts" };
 
-export default function DraftsPage() {
+const PAGE_SIZE = 30;
+
+export default async function DraftsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
   return (
     <Suspense
+      key={`p${page}`}
       fallback={
         <>
           <div className="admin-header">
@@ -28,27 +37,44 @@ export default function DraftsPage() {
         </>
       }
     >
-      <DraftsData />
+      <DraftsData page={page} />
     </Suspense>
   );
 }
 
-async function DraftsData() {
+async function DraftsData({ page }: { page: number }) {
+  const offset = (page - 1) * PAGE_SIZE;
   const [newsDrafts, newsCounts, articleDrafts, articleCounts, categories] =
     await Promise.all([
-      listRecentDrafts(100),
+      listRecentDrafts(PAGE_SIZE, offset),
       countDraftsByStatus(),
-      listRecentArticleDrafts(100),
+      listRecentArticleDrafts(PAGE_SIZE, offset),
       countArticleDraftsByStatus(),
       listAllCategories(),
     ]);
   return (
-    <DraftsTabbed
-      newsDrafts={newsDrafts}
-      newsCounts={newsCounts}
-      articleDrafts={articleDrafts}
-      articleCounts={articleCounts}
-      categories={categories}
-    />
+    <>
+      <DraftsTabbed
+        newsDrafts={newsDrafts}
+        newsCounts={newsCounts}
+        articleDrafts={articleDrafts}
+        articleCounts={articleCounts}
+        categories={categories}
+      />
+      {(newsDrafts.length === PAGE_SIZE || articleDrafts.length === PAGE_SIZE || page > 1) ? (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
+          {page > 1 ? (
+            <a href={page === 2 ? "/admin/drafts" : `/admin/drafts?page=${page - 1}`} className="btn secondary small">
+              ← Previous
+            </a>
+          ) : null}
+          {(newsDrafts.length === PAGE_SIZE || articleDrafts.length === PAGE_SIZE) ? (
+            <a href={`/admin/drafts?page=${page + 1}`} className="btn secondary small">
+              Next →
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+    </>
   );
 }

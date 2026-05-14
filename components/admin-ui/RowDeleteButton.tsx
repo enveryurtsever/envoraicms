@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "./Modal";
 import { useToast } from "./Toast";
 import { Tooltip } from "./Tooltip";
+import { IconTrash } from "./Icon";
 
-// Renders a small "Delete" button. On click → confirm modal. On confirm →
-// invokes the given server action with id (and optional extra fields), shows
-// a toast, and refreshes the route.
+// Renders a small icon-only "Delete" button. On click → confirm modal. On
+// confirm → invokes the given server action with id (and optional extra
+// fields), shows a toast, and refreshes the route.
 
 export function RowDeleteButton({
   action,
@@ -17,10 +18,11 @@ export function RowDeleteButton({
   confirmTitle = "Delete this item?",
   confirmDescription = "This action cannot be undone.",
   successMessage = "Deleted",
-  className = "btn danger small",
+  className = "btn-icon row-action danger",
 }: {
   action: (fd: FormData) => Promise<void>;
   id: string | number;
+  /** Tooltip + aria-label text (the button itself shows only an icon). */
   label?: string;
   confirmTitle?: string;
   confirmDescription?: string;
@@ -50,13 +52,14 @@ export function RowDeleteButton({
 
   return (
     <>
-      <Tooltip label="Delete">
+      <Tooltip label={label}>
         <button
           type="button"
           className={className}
+          aria-label={label}
           onClick={() => setOpen(true)}
         >
-          {label}
+          <IconTrash size={16} />
         </button>
       </Tooltip>
       <ConfirmDialog

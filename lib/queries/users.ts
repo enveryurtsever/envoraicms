@@ -1,4 +1,6 @@
 import "server-only";
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { sql } from "@/lib/db";
 import type { User, UserRole } from "@/lib/types";
 
@@ -9,14 +11,23 @@ const BASE_COLS = sql`
   "CreatedDate"
 `;
 
-export async function getUserById(id: number): Promise<User | null> {
-  const rows = await sql<User[]>`
-    SELECT ${BASE_COLS} FROM "Users"
-    WHERE "UserID" = ${id} AND "IsDeleted" = FALSE
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
-}
+const loadUserById = unstable_cache(
+  async (id: number): Promise<User | null> => {
+    const rows = await sql<User[]>`
+      SELECT ${BASE_COLS} FROM "Users"
+      WHERE "UserID" = ${id} AND "IsDeleted" = FALSE
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  },
+  ["user:by-id"],
+  { revalidate: 300, tags: ["users"] },
+);
+
+// Wrapped in unstable_cache so the admin layout's per-request getUserById
+// (which runs on every admin navigation) hits the cache instead of issuing
+// a Users SELECT each time. Invalidated by tag "users" on updates below.
+export const getUserById = cache((id: number) => loadUserById(id));
 
 export async function getUserByEmail(email: string): Promise<(User & { PasswordHash: string }) | null> {
   const rows = await sql<(User & { PasswordHash: string })[]>`
@@ -27,12 +38,23 @@ export async function getUserByEmail(email: string): Promise<(User & { PasswordH
   return rows[0] ?? null;
 }
 
-export async function listUsers(): Promise<User[]> {
+export async function listUsers({
+  limit = 50,
+  offset = 0,
+}: { limit?: number; offset?: number } = {}): Promise<User[]> {
   return sql<User[]>`
     SELECT ${BASE_COLS} FROM "Users"
     WHERE "IsDeleted" = FALSE
     ORDER BY "UserID" ASC
+    LIMIT ${limit} OFFSET ${offset}
   `;
+}
+
+export async function countUsers(): Promise<number> {
+  const rows = await sql<{ c: number }[]>`
+    SELECT COUNT(*)::int AS c FROM "Users" WHERE "IsDeleted" = FALSE
+  `;
+  return rows[0]?.c ?? 0;
 }
 
 export async function createUser(data: {

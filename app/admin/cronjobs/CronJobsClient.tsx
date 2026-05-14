@@ -129,14 +129,24 @@ export function CronJobsClient({
                       </>
                     )}
                   </td>
-                  <td style={{ fontSize: "0.75rem" }}>
+                  <td style={{ fontSize: "0.75rem", maxWidth: 320 }}>
                     <div><LocalDate value={j.LastRunAt} mode="relative" /></div>
                     {j.LastRunStatus ? (
                       <span className={`badge ${statusBadge}`}>{j.LastRunStatus}</span>
                     ) : null}
                     {j.LastRunMessage ? (
-                      <div style={{ color: "#6b7280", marginTop: 2 }}>
-                        {j.LastRunMessage.slice(0, 80)}
+                      <div
+                        style={{
+                          color: j.LastRunStatus === "error" ? "#b91c1c" : "#6b7280",
+                          marginTop: 2,
+                          whiteSpace: "normal",
+                          wordBreak: "break-word",
+                          lineHeight: 1.35,
+                        }}
+                        title={j.LastRunMessage}
+                      >
+                        {j.LastRunMessage.slice(0, 240)}
+                        {j.LastRunMessage.length > 240 ? "…" : ""}
                       </div>
                     ) : null}
                   </td>
@@ -300,16 +310,18 @@ function RefillButton({
       disabled={pending || disabled}
       onClick={() => {
         startTransition(async () => {
-          toast.info(`Refilling drafts for "${name}"…`);
           try {
             const fd = new FormData();
             fd.append("id", String(id));
             await refillArticleJobAction(fd);
-            toast.success("Drafts refilled", `New ideas saved for "${name}".`);
+            toast.info(
+              "Refill started",
+              `"${name}" is generating drafts in the background. Check back in a minute.`,
+            );
             router.refresh();
           } catch (err) {
             toast.error(
-              "Refill failed",
+              "Refill failed to start",
               err instanceof Error ? err.message : "Unexpected error",
             );
           }

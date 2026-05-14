@@ -1,13 +1,19 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import useEmblaCarousel from "embla-carousel-react";
 import { useCallback, useEffect, useState } from "react";
 import type { ContentListItem } from "@/lib/types";
 import { contentThumb } from "@/lib/utils";
+import { SafeImage } from "@/components/SafeImage";
 
-export function HeroCarousel({ items }: { items: ContentListItem[] }) {
+export function HeroCarousel({
+  items,
+  fallbackSrc = "/Upload/default-cover.jpg",
+}: {
+  items: ContentListItem[];
+  fallbackSrc?: string;
+}) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
   const [selected, setSelected] = useState(0);
 
@@ -35,12 +41,12 @@ export function HeroCarousel({ items }: { items: ContentListItem[] }) {
         <div className="flex">
           {items.map((item, i) => {
             const href = `/${item.CatSeo}/${item.ContentSeo}`;
-            const image = contentThumb(item.ContentImage) || "/Upload/default-cover.jpg";
+            const image = contentThumb(item.ContentImage) || fallbackSrc;
             return (
               <div key={item.ContentID} className="relative min-w-0 flex-[0_0_100%]">
                 <Link href={href} className="group block">
                   <div className="relative aspect-[16/10] w-full bg-neutral-200">
-                    <Image
+                    <SafeImage
                       src={image}
                       alt={item.ContentTitle}
                       fill

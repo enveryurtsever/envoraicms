@@ -202,6 +202,36 @@ export function IconInbox(p: IconProps) {
   );
 }
 
+export function IconTrash(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+export function IconExternalLink(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M14 4h6v6" />
+      <path d="M20 4 10 14" />
+      <path d="M20 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5" />
+    </svg>
+  );
+}
+
+export function IconCode(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="m9 8-5 4 5 4" />
+      <path d="m15 8 5 4-5 4" />
+    </svg>
+  );
+}
+
 export type AdminIconKey =
   | "dashboard"
   | "newspaper"

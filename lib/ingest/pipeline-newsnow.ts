@@ -19,6 +19,7 @@ import {
   type Draft,
 } from "./drafts";
 import { ensureUniqueSlug } from "./db";
+import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
 const PROVIDER = "newsnow";
 
@@ -45,15 +46,15 @@ async function insertContentFromDraft(args: {
   imagePath: string;
   publisherName: string | null;
   staggerMinutes: number;
+  pickAuthor: import("@/lib/queries/authors").AuthorPicker;
 }): Promise<number> {
-  const { cat, draft, rewritten, imagePath, publisherName, staggerMinutes } = args;
+  const { cat, draft, rewritten, imagePath, publisherName, staggerMinutes, pickAuthor } = args;
   const slug = await ensureUniqueSlug(rewritten.slug);
   const source = publisherName
     ? JSON.stringify({ title: publisherName, href: draft.SourceUrl ?? "" })
     : null;
   const homepage = rewritten.importance >= 7;
-  const { getRandomAuthorForCategory } = await import("@/lib/queries/authors");
-  const author = await getRandomAuthorForCategory(cat.CatID);
+  const author = pickAuthor(cat.CatID);
   const rows = await sql<{ ContentID: number }[]>`
     INSERT INTO "Contents" (
       "FK_CatID","FK_LangID","ContentTitle","ContentShort","ContentDetail",
@@ -124,7 +125,11 @@ export async function processPendingDrafts(args: {
   const { limit, log } = args;
   const result: PipelineOutcome = { inserted: 0, skipped: 0, errored: 0, log };
 
-  const categories = await loadActiveCategories();
+  const { buildAuthorPicker } = await import("@/lib/queries/authors");
+  const [categories, pickAuthor] = await Promise.all([
+    loadActiveCategories(),
+    buildAuthorPicker(),
+  ]);
   if (categories.length === 0) {
     log.push("[newsnow] no active categories — abort");
     return result;
@@ -192,7 +197,7 @@ export async function processPendingDrafts(args: {
       const publisherName =
         article.publisher?.name ?? null;
 
-      const stagger = result.inserted * 7;
+      const stagger = result.inserted * 15;
       const contentId = await insertContentFromDraft({
         cat,
         draft,
@@ -200,7 +205,10 @@ export async function processPendingDrafts(args: {
         imagePath,
         publisherName,
         staggerMinutes: stagger,
+        pickAuthor,
       });
+      const url = await buildContentUrl(cat.CatSeo, rewritten.slug);
+      submitIndexingFireAndForget(contentId, url, "URL_UPDATED");
       await markDone({ id: draft.DraftID, catId: cat.CatID, contentId });
       log.push(
         `[draft#${draft.DraftID}] inserted Content#${contentId} into ${cat.CatSeo}`,
@@ -216,15 +224,17 @@ export async function processPendingDrafts(args: {
   return result;
 }
 
-/** End-to-end run for one cron job: fetch + immediately process up to N. */
+/** End-to-end run for one cron job: fetch + immediately process up to N.
+ *  Pass `log` to capture progress so the caller can persist it on failure. */
 export async function runNewsNowJob(args: {
   cronId: number | null;
   params: NewsNowFetchParams;
   articlesPerRun: number;
+  log?: string[];
 }): Promise<PipelineOutcome> {
   const { assertPreflightOk } = await import("@/lib/queries/preflight");
   await assertPreflightOk();
-  const log: string[] = [];
+  const log = args.log ?? [];
   await fetchAndStageNewsNow({
     cronId: args.cronId,
     params: { ...args.params, limit: Math.max(args.articlesPerRun, 5) },

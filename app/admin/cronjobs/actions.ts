@@ -28,6 +28,35 @@ import type {
   TextAiProvider,
 } from "@/lib/ingest/types";
 import { logAudit } from "@/lib/audit";
+import type { PipelineOutcome } from "@/lib/ingest/types";
+
+/** Build a human-readable last-run message. On success: just the counts.
+ *  On failure: counts + the first concrete error reason pulled from the run
+ *  log (provider/billing/auth errors, etc.) so the cause is visible in the
+ *  Trigger toast and the cron list "Last run" cell — not buried in the
+ *  IngestRuns.Log blob. */
+function summarizeOutcome(o: PipelineOutcome): string {
+  const counts =
+    `inserted=${o.inserted} skipped=${o.skipped} errored=${o.errored}`;
+  if (o.errored === 0) return counts;
+
+  const errLine = o.log.find((l) => /\s+error:/i.test(l));
+  if (!errLine) return counts;
+
+  // Strip leading "[tag]" prefix and "...error:" preamble.
+  let m = errLine
+    .replace(/^\s*\[[^\]]*\]\s*/, "")
+    .replace(/^.*?error:\s*/i, "")
+    .trim();
+
+  // Provider responses are often JSON envelopes — pull out the human
+  // message field if present (Anthropic / OpenAI / similar shapes).
+  const jsonMsg = m.match(/"message"\s*:\s*"((?:[^"\\]|\\.)+)"/);
+  if (jsonMsg) m = jsonMsg[1];
+
+  if (m.length > 280) m = m.slice(0, 277) + "...";
+  return `${counts}. ${m}`;
+}
 
 function str(fd: FormData, k: string): string | null {
   const v = fd.get(k);
@@ -104,27 +133,54 @@ function parseForm(fd: FormData): Parsed | string {
   }
 
   // Article kind — SerpAPI seed + multi-provider AI.
+  const routerMode = (str(fd, "ArticleMode") ?? "single") === "router";
   const seedQuery = str(fd, "SeedQuery");
   const targetCatRaw = str(fd, "TargetCatID");
   const targetCatId = targetCatRaw ? Number(targetCatRaw) : null;
-  if (!seedQuery) return "article_seed";
-  if (!targetCatId || !Number.isFinite(targetCatId)) return "article_target_cat";
-  const ideationBatchCount = Math.max(5, Math.min(50, num(fd, "IdeationBatchCount", 20)));
+
+  let mirrorCatId: number | null = null;
+  if (routerMode) {
+    config.routerMode = true;
+    config.maxCategoriesPerTick = Math.max(
+      1,
+      Math.min(30, num(fd, "MaxCategoriesPerTick", 8)),
+    );
+    config.perCategoryTrendLimit = Math.max(
+      3,
+      Math.min(25, num(fd, "PerCategoryTrendLimit", 8)),
+    );
+  } else {
+    if (!seedQuery) return "article_seed";
+    if (!targetCatId || !Number.isFinite(targetCatId)) {
+      return "article_target_cat";
+    }
+    config.seedQuery = seedQuery;
+    config.targetCatId = targetCatId;
+    mirrorCatId = targetCatId;
+  }
+
+  config.ideationBatchCount = Math.max(
+    5,
+    Math.min(50, num(fd, "IdeationBatchCount", 20)),
+  );
   const trendsLocation = str(fd, "TrendsLocation");
   const trendsLanguage = str(fd, "TrendsLanguage");
+  const trendsWindow = str(fd, "TrendsWindow");
   const guidance = str(fd, "Guidance");
-  config.seedQuery = seedQuery;
-  config.targetCatId = targetCatId;
-  config.ideationBatchCount = ideationBatchCount;
   if (trendsLocation) config.trendsLocation = trendsLocation.toLowerCase();
   if (trendsLanguage) config.trendsLanguage = trendsLanguage.toLowerCase();
+  if (trendsWindow) config.trendsWindow = trendsWindow;
   if (guidance) config.guidance = guidance;
   config.autoRefill = bool(fd, "AutoRefill");
+  config.publishStaggerMinutes = Math.max(
+    0,
+    Math.min(120, num(fd, "PublishStaggerMinutes", 15)),
+  );
 
   return {
     jobName,
     kind,
-    catId: targetCatId,           // mirror to FK_CatID for filtering / dashboard widgets
+    catId: mirrorCatId,           // null in router mode (FK_CatID stays empty)
     newsProvider: null,
     textAiProvider: null,
     imageAiProvider: str(fd, "ImageAiProvider"),
@@ -215,11 +271,14 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
   const runId = await startIngestRun(job.CronID, job.FK_CatID);
   let status: "ok" | "error" | "skipped" = "ok";
   let message = "";
+  // Hoisted so the catch block can persist whatever the pipeline managed to
+  // log before throwing — otherwise fatal errors lose all step context.
+  const partialLog: string[] = [];
 
   try {
     if (job.Kind === "article") {
       const outcome = await runArticleJobTick({ job });
-      message = `inserted=${outcome.inserted} skipped=${outcome.skipped} errored=${outcome.errored}`;
+      message = summarizeOutcome(outcome);
       status = outcome.errored > 0 && outcome.inserted === 0 ? "error" : "ok";
       await finishIngestRun(runId, {
         inserted: outcome.inserted,
@@ -240,8 +299,9 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
           page: cfg.page,
         },
         articlesPerRun: job.ArticlesPerRun,
+        log: partialLog,
       });
-      message = `inserted=${outcome.inserted} skipped=${outcome.skipped} errored=${outcome.errored}`;
+      message = summarizeOutcome(outcome);
       status = outcome.errored > 0 && outcome.inserted === 0 ? "error" : "ok";
       await finishIngestRun(runId, {
         inserted: outcome.inserted,
@@ -268,7 +328,7 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
         image,
         imageFallback,
       });
-      message = `inserted=${outcome.inserted} skipped=${outcome.skipped} errored=${outcome.errored}`;
+      message = summarizeOutcome(outcome);
       status = outcome.errored > 0 && outcome.inserted === 0 ? "error" : "ok";
       await finishIngestRun(runId, {
         inserted: outcome.inserted,
@@ -281,8 +341,9 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
   } catch (err) {
     status = "error";
     message = err instanceof Error ? err.message : String(err);
+    const fatalLog = [...partialLog, `[fatal] ${message}`].join("\n");
     await finishIngestRun(runId, {
-      inserted: 0, skipped: 0, errored: 1, status, log: `[fatal] ${message}`,
+      inserted: 0, skipped: 0, errored: 1, status, log: fatalLog,
     });
   }
 
@@ -299,7 +360,9 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
 
 /** Force-ideate a fresh batch of article drafts for the given job, even if
  *  pending drafts already exist. Used by the "🔁 Refill" button on Article
- *  rows in /admin/cronjobs. */
+ *  rows in /admin/cronjobs. Fires the heavy SerpAPI + Meta AI work in the
+ *  background so the admin UI doesn't freeze (server actions block other
+ *  actions/navigation while awaited). Result is recorded in audit logs. */
 export async function refillArticleJobAction(fd: FormData): Promise<void> {
   await requireRole(["admin", "editor"]);
   const id = Number(fd.get("id"));
@@ -308,15 +371,24 @@ export async function refillArticleJobAction(fd: FormData): Promise<void> {
   if (!job) throw new Error("Job not found.");
   if (job.Kind !== "article") throw new Error("Refill is only for article jobs.");
 
-  const log: string[] = [];
-  const result = await ideateForJob({ job, log });
-  await logAudit(
-    "cronjobs",
-    `"${job.JobName}" article job refilled (saved=${result.saved}, dup=${result.duplicates})`,
-  );
+  // revalidateTag must be called from the action body, not from a detached
+  // promise — Next 15 throws DYNAMIC_SERVER_USAGE otherwise. The synchronous
+  // revalidateTag below covers the cronjobs list; drafts pick up fresh data
+  // via their own revalidate window or the next manual refresh.
+  void (async () => {
+    const log: string[] = [];
+    try {
+      const result = await ideateForJob({ job, log });
+      await logAudit(
+        "cronjobs",
+        `"${job.JobName}" article job refilled (saved=${result.saved}, dup=${result.duplicates})`,
+      );
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      await logAudit("cronjobs", `"${job.JobName}" refill failed: ${m}`);
+    }
+  })();
+
+  await logAudit("cronjobs", `"${job.JobName}" refill started in background`);
   revalidateTag("cronjobs");
-  revalidateTag("article-drafts");
-  if (result.saved === 0 && result.trendCount === 0) {
-    throw new Error("SerpAPI returned no trends — nothing to ideate.");
-  }
 }

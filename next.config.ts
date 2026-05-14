@@ -1,11 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   poweredByHeader: false,
   compress: true,
   reactStrictMode: true,
+  // sharp is a native binding loaded at runtime; detect-libc (its dep)
+  // requires('child_process') which webpack can't resolve when bundling.
+  serverExternalPackages: ["sharp"],
   images: {
+    // Source files are already pre-resized webp (saveContentImage produces
+    // both full and thumb variants). Skipping the /_next/image optimizer
+    // avoids fetch loops behind reverse proxies and the extra sharp call
+    // per request.
+    unoptimized: true,
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: process.env.CDN_HOSTNAME
@@ -31,13 +38,16 @@ const nextConfig: NextConfig = {
     const cdn = process.env.CDN_HOSTNAME;
     if (!cdn) return [];
     return [
-      { source: "/Content/:path*", destination: `https://${cdn}/Content/:path*` },
+      {
+        source: "/Upload/content/:path*",
+        destination: `https://${cdn}/Upload/content/:path*`,
+      },
     ];
   },
   async headers() {
     return [
       {
-        source: "/Content/:path*",
+        source: "/Upload/content/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=2592000, immutable" },
         ],

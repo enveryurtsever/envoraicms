@@ -156,10 +156,13 @@ Return STRICT JSON with these exact keys:
 - detail: 700-1000 words of HTML. Required structure:
     1. Opening paragraph answering who/what/where/when in concrete terms.
     2. At least one direct quote with attribution. Make sources plausible (industry analysts, named experts).
-    3. One <h2> subheading mid-article signaling a thematic shift.
-    4. Specific numbers, dates, proper nouns. No vague "some" / "many" / "recently".
-    5. Vary paragraph length.
-    6. Allowed tags: <p>, <h2>, <strong>, <em>, <ul>, <li>, <a>. NO <html>, <body>, <script>, <img>, <iframe>.
+    3. Two or three <h2> subheadings that break the article into distinct angles (context / what's new / why it matters). Headings must signal a real shift in topic, not just a label.
+    4. Keep each <p> short: 2 to 4 sentences, never longer than ~80 words. Wall-of-text paragraphs are not acceptable. Split or move material under an <h2> instead.
+    5. Use a <ul><li> list whenever the source enumerates three or more parallel items (bug fixes, features, products). Do not pack enumerations into a single long paragraph.
+    6. Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. Summarize in plain English; include an ID only when it adds reader value, at most once or twice per article.
+    7. Specific numbers, dates, proper nouns. No vague "some" / "many" / "recently".
+    8. Vary paragraph length within the 2-4 sentence cap.
+    9. Allowed tags: <p>, <h2>, <h3>, <strong>, <em>, <ul>, <ol>, <li>, <a>, <blockquote>. NO <html>, <body>, <script>, <img>, <iframe>.
 - keywords: 5-8 lowercase comma-separated; the first is the primary and MUST appear in title and detail body.
 - desc: meta description 150-160 chars, compelling, includes primary keyword.
 - slug: kebab-case 4-10 words, descriptive.

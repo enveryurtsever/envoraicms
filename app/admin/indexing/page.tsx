@@ -4,7 +4,7 @@ import { listRecentIndexingLog, countIndexingLog24h } from "@/lib/queries/indexi
 import { CardSkeleton, TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { IndexingClient } from "./IndexingClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Search Console" };
 
 export default function IndexingPage() {
   return (

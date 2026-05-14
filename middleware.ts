@@ -30,8 +30,11 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Next internals ve statik varlıklar hariç tüm yollar
-    "/((?!_next/|favicon.ico|Upload/|Content/|api/).*)",
+    // Next internals ve statik varlıklar hariç tüm yollar.
+    // `google[a-z0-9]+\.html` istisnası: Search Console / Indexing API
+    // sahiplik doğrulama dosyaları (public/ içinden serve edilir, dynamic
+    // route ile çakışmasın).
+    "/((?!_next/|favicon.ico|Upload/|Content/|api/|google[a-z0-9]+\\.html).*)",
     "/admin/:path*",
   ],
 };

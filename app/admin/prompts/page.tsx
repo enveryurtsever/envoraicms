@@ -3,7 +3,7 @@ import { listPrompts, findDefault } from "@/lib/queries/prompts";
 import { CardSkeleton } from "@/components/admin-ui/Skeletons";
 import { PromptsClient } from "./PromptsClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "AI Prompts" };
 
 export default function PromptsPage() {
   return (

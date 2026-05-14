@@ -42,9 +42,9 @@ export async function GET() {
     if (rows[0]?.ok !== 1) throw new Error("unexpected response");
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const m = err instanceof Error ? err.message : String(err);
+    console.error("[install/precheck] db unreachable:", err);
     return NextResponse.json(
-      { ok: false, error: "db_unreachable", message: m },
+      { ok: false, error: "db_unreachable", message: "Could not connect to the database. Check DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD." },
       { status: 502 },
     );
   } finally {

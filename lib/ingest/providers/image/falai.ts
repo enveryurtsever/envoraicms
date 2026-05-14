@@ -14,19 +14,24 @@ type FalImagesResponse = {
   images: Array<{ url: string; width?: number; height?: number; content_type?: string }>;
 };
 
+// 720p (1280x720) — saveContentImage() caps at MAX_WIDTH=1280 anyway, so
+// generating bigger wastes fal.ai bandwidth and disk encoding.
 const DEFAULTS = {
   model: "fal-ai/flux/schnell",
-  imageSize: "landscape_16_9",
+  imageSize: { width: 1280, height: 720 },
   numInferenceSteps: 4,
   pollIntervalMs: 1500,
   pollTimeoutMs: 60_000,
 };
 
+type FalImageSize = string | { width: number; height: number };
+
 export async function makeFalaiProvider(): Promise<ImageProvider> {
   const key = await requireApiKey("falai", "image_ai");
   const token = key.plaintext;
   const model = (key.config.model as string | undefined) ?? DEFAULTS.model;
-  const imageSize = (key.config.imageSize as string | undefined) ?? DEFAULTS.imageSize;
+  const imageSize: FalImageSize =
+    (key.config.imageSize as FalImageSize | undefined) ?? DEFAULTS.imageSize;
   const numInferenceSteps =
     Number(key.config.numInferenceSteps) || DEFAULTS.numInferenceSteps;
 

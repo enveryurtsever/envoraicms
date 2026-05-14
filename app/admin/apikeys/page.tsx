@@ -3,7 +3,7 @@ import { listApiKeys } from "@/lib/queries/apikeys";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { ApiKeysClient } from "./ApiKeysClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "API Keys" };
 
 export default function ApiKeysPage() {
   return (

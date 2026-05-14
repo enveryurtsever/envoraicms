@@ -1,39 +1,16 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { searchAction } from "@/lib/actions/search";
 
 export const MIN_SEARCH_LENGTH = 4;
 
 export function SearchBar({ compact = false }: { compact?: boolean }) {
-  const router = useRouter();
-  const [q, setQ] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const trimmed = q.trim();
-  const tooShort = trimmed.length > 0 && trimmed.length < MIN_SEARCH_LENGTH;
-
   return (
-    <form
-      role="search"
-      className="w-full"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!trimmed) return;
-        if (trimmed.length < MIN_SEARCH_LENGTH) {
-          setError(`Please enter at least ${MIN_SEARCH_LENGTH} characters.`);
-          return;
-        }
-        setError(null);
-        router.push(`/search/${encodeURIComponent(trimmed)}`);
-      }}
-    >
+    <form role="search" className="w-full" action={searchAction}>
       <div
-        className={`flex w-full items-center overflow-hidden rounded-full border bg-white transition-colors focus-within:border-brand ${
-          error ? "border-brand" : "border-neutral-200"
-        } ${compact ? "h-10" : "h-12"}`}
+        className={`flex w-full items-center overflow-hidden rounded-full border border-neutral-200 bg-white transition-colors focus-within:border-brand dark:border-neutral-700 dark:bg-neutral-900 ${
+          compact ? "h-10" : "h-12"
+        }`}
       >
-        <span className="flex h-full items-center pl-5 text-neutral-400" aria-hidden>
+        <span className="flex h-full items-center pl-5 text-neutral-400 dark:text-neutral-500" aria-hidden>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
@@ -42,21 +19,17 @@ export function SearchBar({ compact = false }: { compact?: boolean }) {
         <input
           type="search"
           name="q"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            if (error) setError(null);
-          }}
-          placeholder={`Search news — min. ${MIN_SEARCH_LENGTH} characters…`}
-          aria-label="Search"
+          required
           minLength={MIN_SEARCH_LENGTH}
-          className="h-full flex-1 bg-transparent px-4 text-sm text-neutral-800 outline-none placeholder:text-neutral-400"
+          maxLength={100}
+          placeholder="Search"
+          aria-label="Search"
+          className="h-full flex-1 bg-transparent px-4 text-sm text-neutral-800 outline-none placeholder:text-neutral-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
         />
         <button
           type="submit"
           aria-label="Search"
-          disabled={tooShort}
-          className="flex h-full items-center justify-center bg-brand px-6 text-white transition-colors hover:bg-[#a31620] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-full items-center justify-center bg-brand px-6 text-white transition-colors hover:bg-[#a31620]"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
@@ -64,11 +37,6 @@ export function SearchBar({ compact = false }: { compact?: boolean }) {
           </svg>
         </button>
       </div>
-      {error ? (
-        <p role="alert" className="mt-1.5 pl-5 text-xs text-brand">
-          {error}
-        </p>
-      ) : null}
     </form>
   );
 }

@@ -94,8 +94,11 @@ export async function createContentAction(fd: FormData) {
   await logAudit("contents", `"${data.title}" content added`);
   revalidateTag("contents");
   if (data.isActive) {
-    const url = await buildContentUrl(data.seo);
-    submitIndexingFireAndForget(id, url, "URL_UPDATED");
+    const row = await getAdminContentById(id);
+    if (row?.CatSeo) {
+      const url = await buildContentUrl(row.CatSeo, data.seo);
+      submitIndexingFireAndForget(id, url, "URL_UPDATED");
+    }
   }
   redirect(`/admin/contents/${id}/edit?saved=1`);
 }
@@ -106,8 +109,11 @@ export async function updateContentAction(id: number, fd: FormData) {
   await updateContent(id, data);
   await logAudit("contents", `"${data.title}" content updated`);
   revalidateTag("contents");
-  const url = await buildContentUrl(data.seo);
-  submitIndexingFireAndForget(id, url, data.isActive ? "URL_UPDATED" : "URL_DELETED");
+  const row = await getAdminContentById(id);
+  if (row?.CatSeo) {
+    const url = await buildContentUrl(row.CatSeo, data.seo);
+    submitIndexingFireAndForget(id, url, data.isActive ? "URL_UPDATED" : "URL_DELETED");
+  }
   redirect(`/admin/contents/${id}/edit?saved=1`);
 }
 
@@ -119,8 +125,8 @@ export async function deleteContentAction(fd: FormData) {
   await softDeleteContent(id);
   await logAudit("contents", `"${row?.ContentTitle ?? `#${id}`}" content deleted`);
   revalidateTag("contents");
-  if (row?.ContentSeo) {
-    const url = await buildContentUrl(row.ContentSeo);
+  if (row?.ContentSeo && row?.CatSeo) {
+    const url = await buildContentUrl(row.CatSeo, row.ContentSeo);
     submitIndexingFireAndForget(id, url, "URL_DELETED");
   }
   redirect("/admin/contents?deleted=1");
@@ -138,8 +144,8 @@ export async function toggleContentAction(fd: FormData) {
     "contents",
     `"${row?.ContentTitle ?? `#${id}`}" content ${active ? "published" : "unpublished"}`
   );
-  if (row?.ContentSeo) {
-    const url = await buildContentUrl(row.ContentSeo);
+  if (row?.ContentSeo && row?.CatSeo) {
+    const url = await buildContentUrl(row.CatSeo, row.ContentSeo);
     submitIndexingFireAndForget(id, url, active ? "URL_UPDATED" : "URL_DELETED");
   }
   redirect("/admin/contents");

@@ -8,6 +8,8 @@ import type {
 } from "@/lib/ingest/types";
 import { requireApiKey } from "@/lib/ingest/config";
 import { getPromptTemplate } from "@/lib/queries/prompts";
+import { fixSearchLinks } from "@/lib/ingest/sanitize-links";
+import { currentDateContext } from "@/lib/ingest/prompt-context";
 import type { TextAIClient } from "./index";
 
 /** TextAIClient adapter for Gemini, used by the multi-provider article
@@ -66,20 +68,20 @@ Return STRICT JSON with these exact keys:
 - skip: boolean
 - skipReason: short string (only when skip=true, else "")
 - importance: integer 1-10 scoring newsworthiness for a general US audience. Be strict (typical trending article = 4-6).
-- title: 50-70 characters, SEO-optimized. RULES:
-  * the primary keyword (first entry in your keywords list) MUST appear in the title, preferably near the start
-  * lead with proper nouns / numbers when available — Google click-through prefers concrete specifics
-  * do NOT reuse the original title verbatim; change word order and paraphrase
-  * no clickbait phrases ("You won't believe", "SHOCKING"), no emoji, no ALL-CAPS words except acronyms
-  * NO brand/site name suffix — the layout adds it
-  * end with a concrete noun, not a vague word
+- title: a real, readable headline, 50 to 75 characters typical. RULES:
+  * lead with proper nouns, numbers, or a specific event when available. Google click-through prefers concrete specifics.
+  * do NOT reuse the original title verbatim; change word order and paraphrase.
+  * skip marketing verbs (transforms, revolutionizes, redefines, unleashes, supercharges, game-changing).
+  * no clickbait phrases ("You won't believe", "SHOCKING"), no emoji, no ALL-CAPS words except real acronyms.
+  * do NOT add the brand or site name as a suffix; the layout adds it.
+  * write the way a person would say it. Avoid title-case noun stacks. The keyword does not need to be at the start of the title.
 - titleScore: integer 0-100, your honest self-estimate of the title's SEO quality (keyword prominence, specificity, length fit, CTR appeal). Used for monitoring only.
 - short: 1-2 sentences summarizing the story (<= 220 chars)
 - detail: LONG HTML body, 700-1000 words, structured like a wire-service / Al Jazeera / Reuters feature. Required:
     1. Opening paragraph: who/what/where/when in one tight paragraph. Full names and titles on first mention.
     2. Direct quotes: at least one quoted statement with attribution ("X said", "according to Y"). Quotes inside &ldquo; / &rdquo; or straight quotes.
     3. One <h2> subheading in the middle signaling a thematic shift.
-    4. Specific numbers, dates, proper nouns woven throughout — no vague "some", "many", "recently".
+    4. Specific numbers, dates, proper nouns woven throughout. No vague "some", "many", or "recently" without backing.
     5. At least one paragraph of context/background explaining why the story matters.
     6. Vary paragraph length.
     7. Allowed tags: <p>, <h2>, <strong>, <em>, <ul>, <li>, <a>. No <html>, <body>, <script>, <img>, or <iframe>.
@@ -94,7 +96,14 @@ Internal keyword linking (IMPORTANT):
 - Only link the FIRST occurrence of each chosen keyword. Pick named entities (people, places, organizations, events), not generic adjectives.
 - Never put a link inside a heading.
 
-Tone: professional journalism, confident, no AI tells ("delving", "in the realm of", "it's important to note"). Report — do not editorialize.`;
+Tone: professional journalism. Confident, calm, specific. Report. Do not editorialize. Do not summarize at the end with a "looking forward" wrap-up. Vary sentence and paragraph length. Do not use the same connective ("Moreover", "Furthermore", "Additionally") more than once across the whole piece.
+
+Punctuation rules (strict, non-negotiable, apply to every field you produce):
+- Never use the em dash character. If you want a pause, use a comma, a period, a colon, parentheses, or rewrite the sentence.
+- Never use the en dash character. Plain hyphens inside compound words are fine.
+- Do not end any field with an ellipsis.
+
+Banned phrases and AI tells (do not use any of these): delve, delving into, in the realm of, navigating the landscape, paradigm shift, leverage (as a verb), unlock the power of, in today's [adjective] world, the world of [noun], game-changing, revolutionary, cutting-edge, robust, seamless, unparalleled, "it is important to note", "it is worth noting", tapestry of, transforms or is transforming.`;
 
 export async function makeGeminiProvider(): Promise<TextAiProvider> {
   const key = await requireApiKey("gemini", "text_ai");
@@ -116,7 +125,9 @@ export async function makeGeminiProvider(): Promise<TextAiProvider> {
         ? fullContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 8000)
         : "";
       const systemTemplate = (await getPromptTemplate("ingest_system")) || REWRITE_SYSTEM;
-      const prompt = `Category: ${cat.CatName}
+      const prompt = `${currentDateContext()}
+
+Category: ${cat.CatName}
 Original title: ${article.title}
 Original excerpt: ${article.excerpt ?? ""}
 Original body:
@@ -146,6 +157,7 @@ Rewrite this as an original article following the rules above. Return JSON only.
         );
       }
       parsed.slug = slugify(parsed.slug);
+      parsed.detail = fixSearchLinks(parsed.detail);
       const imp = Number(parsed.importance);
       parsed.importance = Number.isFinite(imp)
         ? Math.max(1, Math.min(10, Math.round(imp)))

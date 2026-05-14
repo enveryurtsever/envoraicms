@@ -21,6 +21,8 @@ const args = buildPostgresArgs(cfg, { max: 2 });
 const sql = (postgres as any)(...args) as ReturnType<typeof postgres>;
 
 const MIGRATIONS_DIR = join(process.cwd(), "deploy", "migrations");
+const SCHEMA_FILE = join(process.cwd(), "deploy", "schema.sql");
+const SCHEMA_MARKER = "000_schema.sql";
 
 async function ensureTable() {
   await sql`
@@ -49,8 +51,21 @@ async function markApplied(name: string) {
   await sql`INSERT INTO "_migrations" ("name") VALUES (${name})`;
 }
 
+async function applyBaseSchema() {
+  if (await alreadyApplied(SCHEMA_MARKER)) {
+    console.log(`[skip] ${SCHEMA_MARKER}`);
+    return;
+  }
+  const content = await readFile(SCHEMA_FILE, "utf8");
+  console.log(`[apply] ${SCHEMA_MARKER}`);
+  await sql.unsafe(stripTransactionStatements(content));
+  await markApplied(SCHEMA_MARKER);
+  console.log(`[ok]    ${SCHEMA_MARKER}`);
+}
+
 async function main() {
   await ensureTable();
+  await applyBaseSchema();
   const files = (await readdir(MIGRATIONS_DIR))
     .filter((f) => f.endsWith(".sql"))
     .sort();

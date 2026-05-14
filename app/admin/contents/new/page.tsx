@@ -3,7 +3,7 @@ import { listAllCategories } from "@/lib/queries/admin-categories";
 import { createContentAction } from "../actions";
 import ContentForm from "../ContentForm";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "New article" };
 
 export default async function NewContentPage({
   searchParams,

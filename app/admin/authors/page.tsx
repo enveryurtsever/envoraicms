@@ -4,7 +4,7 @@ import { listAllCategories } from "@/lib/queries/admin-categories";
 import { TableSkeleton } from "@/components/admin-ui/Skeletons";
 import { AuthorsClient } from "./AuthorsClient";
 
-export const dynamic = "force-dynamic";
+export const metadata = { title: "Authors" };
 
 export default function AuthorsPage() {
   return (

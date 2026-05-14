@@ -8,6 +8,8 @@ import type {
 import { requireApiKey } from "@/lib/ingest/config";
 import { getPromptTemplate } from "@/lib/queries/prompts";
 import { REWRITE_SYSTEM } from "@/lib/ingest/providers/text/gemini";
+import { fixSearchLinks } from "@/lib/ingest/sanitize-links";
+import { currentDateContext } from "@/lib/ingest/prompt-context";
 
 function slugify(s: string): string {
   return s
@@ -59,7 +61,9 @@ export async function rewriteWithCategory(args: {
     .join("\n");
 
   const bodyText = strip(article.text ?? article.excerpt ?? "", 8000);
-  const userPrompt = `Site categories (slug :: name) — pick exactly one slug:
+  const userPrompt = `${currentDateContext()}
+
+Site categories (slug :: name) — pick exactly one slug:
 ${categoryList || "(none defined)"}
 ${args.hintCategory ? `Provider hint category: ${args.hintCategory}` : ""}
 
@@ -100,6 +104,7 @@ list above. Return JSON only.`;
   }
 
   parsed.slug = slugify(parsed.slug);
+  parsed.detail = fixSearchLinks(parsed.detail);
   const imp = Number(parsed.importance);
   parsed.importance = Number.isFinite(imp)
     ? Math.max(1, Math.min(10, Math.round(imp)))

@@ -22,7 +22,7 @@ export function ColorModeToggle({ current }: { current: ColorMode }) {
         aria-label={`Switch to ${next} mode`}
         aria-pressed={current === "dark"}
         disabled={pending}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/80 transition-colors hover:text-white disabled:opacity-50"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-current opacity-80 transition-opacity hover:opacity-100 disabled:opacity-50"
       >
         {current === "dark" ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
