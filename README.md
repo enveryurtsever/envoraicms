@@ -132,8 +132,14 @@ You can run a useful site with just a Postgres DB + one AI provider key (Gemini'
 ### Operations
 - Health endpoint at `/api/health`
 - In-process scheduler runs every 60s (`instrumentation.ts` → `lib/ingest/scheduler.ts`); disable with `SCHEDULER_DISABLED=1`
-- Idempotent migrations tracked in `_migrations`; safe to re-run on every deploy
+- Idempotent single-file schema (`deploy/schema.sql`); safe to re-run on every deploy
 - Audit log of admin actions
+- **In-place updater** at `/admin/system/update` — pulls the latest GitHub release, takes a DB + env backup, builds, migrates, and graceful-reloads PM2. Enable with `UPDATER_ENABLED=true`. Requires the repo to be a `git clone` (not a tarball upload).
+
+### Security
+- AES-GCM encrypted session cookies, no third-party auth dependency
+- **Admin login brute-force guard:** 5 failed attempts from the same IP within 15 minutes triggers a temporary lockout. IP detection prefers `X-Real-IP` (proxy-set, unspoofable) over `X-Forwarded-For` first hop, so a forged XFF header can't bypass the lock.
+- Admin dashboard "today / week / month / year" stats compute calendar boundaries in **the admin's browser timezone** (`Intl.DateTimeFormat().resolvedOptions().timeZone`), not the server's process TZ — so the counters stay correct after midnight in non-UTC zones.
 
 ## Tech stack
 
@@ -152,13 +158,14 @@ You can run a useful site with just a Postgres DB + one AI provider key (Gemini'
 ## Quick start
 
 ```bash
-# 1. Clone
+# 1. Clone (do not download a zip — the in-app updater needs .git/)
 git clone https://github.com/enveryurtsever/envoraicms.git
 cd envoraicms
 
 # 2. Env
 cp .env.example .env.local
 # edit .env.local — fill in DB_HOST / DB_NAME / DB_USER / DB_PASSWORD
+# (and set UPDATER_ENABLED=true if you want one-click updates from the admin)
 
 # 3. Create the DB
 createdb envoraicms
@@ -176,7 +183,9 @@ npm run start
 
 The wizard creates the admin user, writes the initial Settings row, and drops you into `/admin`.
 
-Full step-by-step (PM2, reverse proxy, troubleshooting) lives in [INSTALL.md](INSTALL.md).
+Future releases are applied from `/admin/system/update` — the updater backs up the DB, fetches the new tag, rebuilds, migrates, and gracefully reloads PM2. No SSH needed unless a release notes a config-file change.
+
+Full step-by-step (PM2, reverse proxy, updater quirks, troubleshooting) lives in [INSTALL.md](INSTALL.md).
 
 ## Configuration
 
@@ -193,6 +202,8 @@ Almost everything is in the database, edited from `/admin/settings`. The only en
 | `PORT`                 | no       | Next listening port. Default `3000`           |
 | `SITE_URL`             | no       | Used only as a fallback before install        |
 | `SCHEDULER_DISABLED`   | no       | Set to `1` to disable in-process cron         |
+| `UPDATER_ENABLED`      | no       | `true` enables `/admin/system/update`         |
+| `UPDATER_GITHUB_REPO`  | no       | `owner/repo` if you forked; default is upstream |
 
 API keys for AI providers (Gemini / OpenAI / Anthropic / SerpAPI) live in the admin panel under **API Keys** — not in env.
 
