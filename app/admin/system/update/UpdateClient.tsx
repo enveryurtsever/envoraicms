@@ -334,8 +334,9 @@ export function UpdateClient({ initialStatus, initialJob, updaterEnabled }: Prop
                     to the install dir, then{" "}
                     <code>git reset --hard {job.fromSha.slice(0, 12) || job.fromVersion}</code>,{" "}
                     <code>npm ci --include=dev</code>,{" "}
+                    <code>npm run migrate</code>,{" "}
                     <code>npm run build</code>,{" "}
-                    <code>pm2 reload envoraicms</code>. DB backup at{" "}
+                    <code>pm2 reload {job.pm2AppName || "envoraicms"}</code>. DB backup at{" "}
                     <code>{job.backupDir}</code>.
                   </div>
                 ) : job.backupDir ? (

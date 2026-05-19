@@ -83,10 +83,18 @@ export async function ensureBackupDir(): Promise<string> {
   return BACKUP_ROOT;
 }
 
+/** Argument prefix for every git command the updater runs, so a
+ *  "fatal: detected dubious ownership" doesn't kill an in-place update when
+ *  PM2 is running as root but the repo was cloned by a regular user (the
+ *  common Hestia/Vesta/cPanel install layout). `safe.directory=*` is a
+ *  one-shot inline config override scoped to a single git invocation, so
+ *  it doesn't touch the operator's global git config. */
+export const GIT_SAFE_DIR_ARGS = ["-c", "safe.directory=*"] as const;
+
 /** Read the current HEAD commit. Used to record a rollback target. */
 export async function getHeadSha(): Promise<string> {
   try {
-    const { stdout } = await runCommand("git", ["rev-parse", "HEAD"]);
+    const { stdout } = await runCommand("git", [...GIT_SAFE_DIR_ARGS, "rev-parse", "HEAD"]);
     return stdout.trim();
   } catch {
     return "";

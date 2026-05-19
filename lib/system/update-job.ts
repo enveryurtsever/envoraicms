@@ -1,7 +1,7 @@
 import "server-only";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { takeBackup, runCommand, getHeadSha } from "./backup";
+import { takeBackup, runCommand, getHeadSha, GIT_SAFE_DIR_ARGS } from "./backup";
 import { clearVersionCache, getCurrentVersion } from "./version";
 
 /** PM2 app name to reload. Mirrors the resolution order in
@@ -58,6 +58,10 @@ export type UpdateJob = {
   toVersion: string;
   tag: string;
   fromSha: string;
+  /** PM2 app name derived at job start. Persisted on the job so the client-
+   *  side error banner can render an accurate manual-recovery command line
+   *  (`pm2 reload <name>`) without re-deriving it in the browser. */
+  pm2AppName: string;
   startedAt: number;
   endedAt: number | null;
   steps: Step[];
@@ -161,6 +165,7 @@ export function startUpdateJob(opts: {
     toVersion: opts.toVersion,
     tag: opts.tag,
     fromSha: "",
+    pm2AppName: pm2AppName(),
     startedAt: Date.now(),
     endedAt: null,
     steps: newSteps(),
@@ -216,7 +221,7 @@ async function runUpdate(job: UpdateJob): Promise<void> {
   // 2. git fetch
   setStep(job, "fetch", "running");
   try {
-    await runCommand("git", ["fetch", "--tags", "--prune", "origin"], {
+    await runCommand("git", [...GIT_SAFE_DIR_ARGS, "fetch", "--tags", "--prune", "origin"], {
       onLine: lineCollector(job, "[git fetch]"),
     });
     setStep(job, "fetch", "done");
@@ -228,7 +233,7 @@ async function runUpdate(job: UpdateJob): Promise<void> {
   // 3. git reset to tag
   setStep(job, "checkout", "running");
   try {
-    await runCommand("git", ["reset", "--hard", job.tag], {
+    await runCommand("git", [...GIT_SAFE_DIR_ARGS, "reset", "--hard", job.tag], {
       onLine: lineCollector(job, "[git reset]"),
     });
     setStep(job, "checkout", "done");
@@ -346,7 +351,7 @@ async function attemptRollback(job: UpdateJob): Promise<void> {
   );
 
   try {
-    await runCommand("git", ["reset", "--hard", job.fromSha], {
+    await runCommand("git", [...GIT_SAFE_DIR_ARGS, "reset", "--hard", job.fromSha], {
       onLine: lineCollector(job, "[rollback git]"),
     });
     await runCommand(
