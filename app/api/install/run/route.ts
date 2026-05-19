@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidateTag } from "next/cache";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, scrypt as scryptCb } from "node:crypto";
@@ -199,6 +200,15 @@ export async function POST(req: NextRequest) {
       `;
       addStep("Default 'General' category created", true);
     }
+
+    // Invalidate the unstable_cache layers that read the rows we just wrote
+    // — without this, getSettings() keeps returning the pre-install defaults
+    // for up to revalidate seconds (1h for "settings", 30s-5min for content
+    // tags) and the new site name / categories don't show up on the public
+    // site until that window expires.
+    revalidateTag("settings");
+    revalidateTag("contents");
+    revalidateTag("categories");
 
     return NextResponse.json({ ok: true, steps });
   } catch (err) {

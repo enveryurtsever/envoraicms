@@ -20,19 +20,50 @@ export type SiteLanguageOption = {
   ogLocale: string;
 };
 
+// Languages, ordered: global defaults first (English, Turkish for project
+// history), then Europe alphabetical by label, then the rest of the world.
+// Add new entries by region so the admin dropdown stays scannable.
 export const SITE_LANGUAGES: SiteLanguageOption[] = [
   { code: "en",    label: "English",            englishName: "English",              ogLocale: "en_US" },
   { code: "tr",    label: "Türkçe",             englishName: "Turkish",              ogLocale: "tr_TR" },
-  { code: "de",    label: "Deutsch",            englishName: "German",               ogLocale: "de_DE" },
-  { code: "fr",    label: "Français",           englishName: "French",               ogLocale: "fr_FR" },
-  { code: "es",    label: "Español",            englishName: "Spanish",              ogLocale: "es_ES" },
-  { code: "it",    label: "Italiano",           englishName: "Italian",              ogLocale: "it_IT" },
-  { code: "pt",    label: "Português",          englishName: "Portuguese",           ogLocale: "pt_PT" },
-  { code: "pt-BR", label: "Português (Brasil)", englishName: "Brazilian Portuguese", ogLocale: "pt_BR" },
+
+  // Europe
+  { code: "sq",    label: "Shqip",              englishName: "Albanian",             ogLocale: "sq_AL" },
+  { code: "be",    label: "Беларуская",         englishName: "Belarusian",           ogLocale: "be_BY" },
+  { code: "bs",    label: "Bosanski",           englishName: "Bosnian",              ogLocale: "bs_BA" },
+  { code: "bg",    label: "Български",          englishName: "Bulgarian",            ogLocale: "bg_BG" },
+  { code: "ca",    label: "Català",             englishName: "Catalan",              ogLocale: "ca_ES" },
+  { code: "hr",    label: "Hrvatski",           englishName: "Croatian",             ogLocale: "hr_HR" },
+  { code: "cs",    label: "Čeština",            englishName: "Czech",                ogLocale: "cs_CZ" },
+  { code: "da",    label: "Dansk",              englishName: "Danish",               ogLocale: "da_DK" },
   { code: "nl",    label: "Nederlands",         englishName: "Dutch",                ogLocale: "nl_NL" },
+  { code: "et",    label: "Eesti",              englishName: "Estonian",             ogLocale: "et_EE" },
+  { code: "fi",    label: "Suomi",              englishName: "Finnish",              ogLocale: "fi_FI" },
+  { code: "fr",    label: "Français",           englishName: "French",               ogLocale: "fr_FR" },
+  { code: "ga",    label: "Gaeilge",            englishName: "Irish",                ogLocale: "ga_IE" },
+  { code: "de",    label: "Deutsch",            englishName: "German",               ogLocale: "de_DE" },
+  { code: "el",    label: "Ελληνικά",           englishName: "Greek",                ogLocale: "el_GR" },
+  { code: "hu",    label: "Magyar",             englishName: "Hungarian",            ogLocale: "hu_HU" },
+  { code: "is",    label: "Íslenska",           englishName: "Icelandic",            ogLocale: "is_IS" },
+  { code: "it",    label: "Italiano",           englishName: "Italian",              ogLocale: "it_IT" },
+  { code: "lv",    label: "Latviešu",           englishName: "Latvian",              ogLocale: "lv_LV" },
+  { code: "lt",    label: "Lietuvių",           englishName: "Lithuanian",           ogLocale: "lt_LT" },
+  { code: "mk",    label: "Македонски",         englishName: "Macedonian",           ogLocale: "mk_MK" },
+  { code: "mt",    label: "Malti",              englishName: "Maltese",              ogLocale: "mt_MT" },
+  { code: "no",    label: "Norsk (bokmål)",     englishName: "Norwegian",            ogLocale: "nb_NO" },
   { code: "pl",    label: "Polski",             englishName: "Polish",               ogLocale: "pl_PL" },
+  { code: "pt",    label: "Português",          englishName: "Portuguese",           ogLocale: "pt_PT" },
+  { code: "ro",    label: "Română",             englishName: "Romanian",             ogLocale: "ro_RO" },
   { code: "ru",    label: "Русский",            englishName: "Russian",              ogLocale: "ru_RU" },
+  { code: "sr",    label: "Српски",             englishName: "Serbian",              ogLocale: "sr_RS" },
+  { code: "sk",    label: "Slovenčina",         englishName: "Slovak",               ogLocale: "sk_SK" },
+  { code: "sl",    label: "Slovenščina",        englishName: "Slovenian",            ogLocale: "sl_SI" },
+  { code: "es",    label: "Español",            englishName: "Spanish",              ogLocale: "es_ES" },
+  { code: "sv",    label: "Svenska",            englishName: "Swedish",              ogLocale: "sv_SE" },
   { code: "uk",    label: "Українська",         englishName: "Ukrainian",            ogLocale: "uk_UA" },
+
+  // Rest of the world
+  { code: "pt-BR", label: "Português (Brasil)", englishName: "Brazilian Portuguese", ogLocale: "pt_BR" },
   { code: "ar",    label: "العربية",            englishName: "Arabic",               ogLocale: "ar_AR" },
   { code: "ja",    label: "日本語",              englishName: "Japanese",             ogLocale: "ja_JP" },
   { code: "ko",    label: "한국어",              englishName: "Korean",               ogLocale: "ko_KR" },
@@ -40,6 +71,10 @@ export const SITE_LANGUAGES: SiteLanguageOption[] = [
   { code: "zh-TW", label: "繁體中文",            englishName: "Traditional Chinese",  ogLocale: "zh_TW" },
   { code: "hi",    label: "हिन्दी",              englishName: "Hindi",                ogLocale: "hi_IN" },
   { code: "id",    label: "Bahasa Indonesia",   englishName: "Indonesian",           ogLocale: "id_ID" },
+  { code: "vi",    label: "Tiếng Việt",         englishName: "Vietnamese",           ogLocale: "vi_VN" },
+  { code: "th",    label: "ไทย",                englishName: "Thai",                 ogLocale: "th_TH" },
+  { code: "he",    label: "עברית",             englishName: "Hebrew",               ogLocale: "he_IL" },
+  { code: "fa",    label: "فارسی",              englishName: "Persian",              ogLocale: "fa_IR" },
 ];
 
 const DEFAULT: SiteLanguageOption = SITE_LANGUAGES[0];
@@ -87,30 +122,91 @@ export type SiteLocationOption = {
   label: string;
 };
 
+// Countries, ordered: Anglosphere first (most common targets), then Europe
+// alphabetical, then the rest. Add new entries by region.
 export const SITE_LOCATIONS: SiteLocationOption[] = [
   { code: "US", label: "United States" },
   { code: "GB", label: "United Kingdom" },
   { code: "CA", label: "Canada" },
   { code: "AU", label: "Australia" },
-  { code: "IN", label: "India" },
-  { code: "TR", label: "Türkiye" },
-  { code: "DE", label: "Germany" },
+  { code: "IE", label: "Ireland" },
+  { code: "NZ", label: "New Zealand" },
+
+  // Europe
+  { code: "AL", label: "Albania" },
+  { code: "AD", label: "Andorra" },
+  { code: "AT", label: "Austria" },
+  { code: "BY", label: "Belarus" },
+  { code: "BE", label: "Belgium" },
+  { code: "BA", label: "Bosnia and Herzegovina" },
+  { code: "BG", label: "Bulgaria" },
+  { code: "HR", label: "Croatia" },
+  { code: "CY", label: "Cyprus" },
+  { code: "CZ", label: "Czechia" },
+  { code: "DK", label: "Denmark" },
+  { code: "EE", label: "Estonia" },
+  { code: "FI", label: "Finland" },
   { code: "FR", label: "France" },
-  { code: "ES", label: "Spain" },
+  { code: "DE", label: "Germany" },
+  { code: "GR", label: "Greece" },
+  { code: "HU", label: "Hungary" },
+  { code: "IS", label: "Iceland" },
   { code: "IT", label: "Italy" },
-  { code: "PT", label: "Portugal" },
-  { code: "BR", label: "Brazil" },
-  { code: "MX", label: "Mexico" },
+  { code: "XK", label: "Kosovo" },
+  { code: "LV", label: "Latvia" },
+  { code: "LI", label: "Liechtenstein" },
+  { code: "LT", label: "Lithuania" },
+  { code: "LU", label: "Luxembourg" },
+  { code: "MT", label: "Malta" },
+  { code: "MD", label: "Moldova" },
+  { code: "MC", label: "Monaco" },
+  { code: "ME", label: "Montenegro" },
   { code: "NL", label: "Netherlands" },
+  { code: "MK", label: "North Macedonia" },
+  { code: "NO", label: "Norway" },
   { code: "PL", label: "Poland" },
+  { code: "PT", label: "Portugal" },
+  { code: "RO", label: "Romania" },
   { code: "RU", label: "Russia" },
+  { code: "SM", label: "San Marino" },
+  { code: "RS", label: "Serbia" },
+  { code: "SK", label: "Slovakia" },
+  { code: "SI", label: "Slovenia" },
+  { code: "ES", label: "Spain" },
+  { code: "SE", label: "Sweden" },
+  { code: "CH", label: "Switzerland" },
+  { code: "TR", label: "Türkiye" },
   { code: "UA", label: "Ukraine" },
+
+  // Asia
+  { code: "IN", label: "India" },
+  { code: "ID", label: "Indonesia" },
   { code: "JP", label: "Japan" },
   { code: "KR", label: "South Korea" },
   { code: "CN", label: "China" },
   { code: "TW", label: "Taiwan" },
-  { code: "ID", label: "Indonesia" },
+  { code: "TH", label: "Thailand" },
+  { code: "VN", label: "Vietnam" },
+  { code: "PH", label: "Philippines" },
+  { code: "MY", label: "Malaysia" },
+  { code: "SG", label: "Singapore" },
+  { code: "IL", label: "Israel" },
+  { code: "AE", label: "United Arab Emirates" },
+  { code: "SA", label: "Saudi Arabia" },
+
+  // Americas
+  { code: "BR", label: "Brazil" },
+  { code: "MX", label: "Mexico" },
   { code: "AR", label: "Argentina" },
+  { code: "CL", label: "Chile" },
+  { code: "CO", label: "Colombia" },
+  { code: "PE", label: "Peru" },
+
+  // Africa
+  { code: "ZA", label: "South Africa" },
+  { code: "EG", label: "Egypt" },
+  { code: "NG", label: "Nigeria" },
+  { code: "MA", label: "Morocco" },
 ];
 
 const DEFAULT_LOCATION: SiteLocationOption = SITE_LOCATIONS[0];
