@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS "Settings" (
   "Description"                TEXT,
   "Keywords"                   TEXT,
   "SiteLanguage"               TEXT DEFAULT 'en',
+  "SiteLocation"               TEXT DEFAULT 'US',
   "SiteLogo"                   TEXT,
   "Favicon"                    TEXT,
   "CoverImage"                 TEXT,
@@ -451,5 +452,13 @@ CREATE TABLE IF NOT EXISTS "LoginAttempts" (
 );
 CREATE INDEX IF NOT EXISTS "idx_loginattempts_ip_created"
   ON "LoginAttempts" ("IP", "CreatedDate" DESC);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- Additive migrations for existing installs. Each ALTER must be guarded by
+-- IF NOT EXISTS so a fresh install (which already got the column via the
+-- CREATE TABLE above) doesn't error.
+-- ─────────────────────────────────────────────────────────────────────────
+ALTER TABLE "Settings"
+  ADD COLUMN IF NOT EXISTS "SiteLocation" TEXT DEFAULT 'US';
 
 COMMIT;

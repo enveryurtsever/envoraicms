@@ -14,6 +14,8 @@ import { makeNewsApi14Provider } from "@/lib/ingest/providers/news/newsapi14";
 import { makeGeminiProvider } from "@/lib/ingest/providers/text/gemini";
 import { makeFalaiProvider } from "@/lib/ingest/providers/image/falai";
 import { makePassthroughProvider } from "@/lib/ingest/providers/image/passthrough";
+import { getSettings } from "@/lib/queries/settings";
+import { newsnowLocation, newsLanguage } from "@/lib/site-language";
 import type {
   ImageProvider,
   NewsProvider,
@@ -66,12 +68,13 @@ export async function runOneCronJob(job: CronJob): Promise<void> {
     } else if (job.NewsProvider === "newsnow") {
       const cfg = job.Config ?? {};
       if (!cfg.newsCategory) throw new Error("NewsNow category missing in job config");
+      const settings = await getSettings();
       const outcome = await runNewsNowJob({
         cronId: job.CronID,
         params: {
           category: cfg.newsCategory,
-          location: cfg.location,
-          language: cfg.language,
+          location: newsnowLocation(settings.SiteLocation),
+          language: newsLanguage(settings.SiteLanguage),
           page: cfg.page,
         },
         articlesPerRun: job.ArticlesPerRun,

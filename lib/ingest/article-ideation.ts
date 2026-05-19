@@ -25,6 +25,13 @@ import { getActiveTextAI } from "./providers/text";
 import { getPromptTemplate } from "@/lib/queries/prompts";
 import { listActiveRoutableCategories } from "./db";
 import { currentDateContext } from "./prompt-context";
+import { getSettings } from "@/lib/queries/settings";
+import {
+  serpapiGeo,
+  newsLanguage,
+  languageEnglishName,
+  locationEnglishName,
+} from "@/lib/site-language";
 import {
   saveDraftBatch,
   recentTitlesForCategory,
@@ -77,10 +84,11 @@ async function ideateRouterMode(args: {
   const perCatTrends = clamp(Number(cfg.perCategoryTrendLimit ?? 8), 3, 25);
   const guidance =
     typeof cfg.guidance === "string" ? cfg.guidance.trim() : "";
-  const location = typeof cfg.trendsLocation === "string"
-    ? cfg.trendsLocation : undefined;
-  const language = typeof cfg.trendsLanguage === "string"
-    ? cfg.trendsLanguage : undefined;
+  const settings = await getSettings();
+  const location = serpapiGeo(settings.SiteLocation);
+  const language = newsLanguage(settings.SiteLanguage);
+  const languageName = languageEnglishName(settings.SiteLanguage);
+  const countryName = locationEnglishName(settings.SiteLocation);
   const window = pickWindow(cfg.trendsWindow);
 
   const allCats = await listActiveRoutableCategories(maxCats);
@@ -90,7 +98,7 @@ async function ideateRouterMode(args: {
   }
   log.push(
     `[ideation] router cats=${allCats.length} batch=${batch} ` +
-      `perCat=${perCatTrends} loc=${location ?? "us"} lang=${language ?? "en"} window=${window}`,
+      `perCat=${perCatTrends} loc=${location} lang=${language} window=${window}`,
   );
 
   // 1) Trends, dedupe-titles, AI provider, and prompt template are all
@@ -138,13 +146,17 @@ async function ideateRouterMode(args: {
   }
 
   log.push(`[ideation] router meta provider=${metaAI.name}`);
-  const systemPrompt = promptOverride || DEFAULT_IDEATION_SYSTEM;
+  const systemPrompt = (promptOverride || DEFAULT_IDEATION_SYSTEM)
+    .replace(/\{language\}/g, languageName)
+    .replace(/\{country\}/g, countryName);
   const userPrompt = buildRouterUserPrompt({
     cats: allCats,
     trends: taggedTrends,
     existingByCat,
     batch,
     guidance,
+    languageName,
+    countryName,
   });
 
   type IdeasResp = { ideas?: unknown };
@@ -208,19 +220,22 @@ async function ideateSingleCategory(args: {
   const cat = await loadCategoryWithKeywords(targetCatId);
   if (!cat) throw new Error(`Target category #${targetCatId} not active`);
 
+  const settings = await getSettings();
+  const location = serpapiGeo(settings.SiteLocation);
+  const language = newsLanguage(settings.SiteLanguage);
+  const languageName = languageEnglishName(settings.SiteLanguage);
+  const countryName = locationEnglishName(settings.SiteLocation);
   const window = pickWindow(cfg.trendsWindow);
   log.push(
-    `[ideation] seed="${seed}" cat=${cat.CatSeo} batch=${batch} loc=${
-      cfg.trendsLocation ?? "us"
-    } lang=${cfg.trendsLanguage ?? "en"} window=${window}`,
+    `[ideation] seed="${seed}" cat=${cat.CatSeo} batch=${batch} loc=${location} lang=${language} window=${window}`,
   );
 
   // Trends, recent titles, AI provider, and prompt are independent — fan out.
   const [trends, existingTitles, metaAI, promptOverride] = await Promise.all([
     fetchRelatedTrends({
       seed,
-      location: cfg.trendsLocation as string | undefined,
-      language: cfg.trendsLanguage as string | undefined,
+      location,
+      language,
       limit: batch * 2,
       window,
     }),
@@ -234,7 +249,9 @@ async function ideateSingleCategory(args: {
   }
 
   log.push(`[ideation] meta provider=${metaAI.name}`);
-  const systemPrompt = promptOverride || DEFAULT_IDEATION_SYSTEM;
+  const systemPrompt = (promptOverride || DEFAULT_IDEATION_SYSTEM)
+    .replace(/\{language\}/g, languageName)
+    .replace(/\{country\}/g, countryName);
 
   const userPrompt = buildSingleUserPrompt({
     cat,
@@ -243,6 +260,8 @@ async function ideateSingleCategory(args: {
     guidance,
     trends: trends.map((t) => t.query),
     existingTitles,
+    languageName,
+    countryName,
   });
 
   type IdeasResp = { ideas?: unknown };
@@ -385,6 +404,8 @@ function buildSingleUserPrompt(args: {
   guidance: string;
   trends: string[];
   existingTitles: string[];
+  languageName: string;
+  countryName: string;
 }): string {
   const trendList = args.trends.map((q, i) => `${i + 1}. ${q}`).join("\n");
   const existingList = args.existingTitles
@@ -393,6 +414,9 @@ function buildSingleUserPrompt(args: {
     .join("\n");
   return [
     currentDateContext(),
+    "",
+    `Output language: ${args.languageName}. Every text field (title, summary, keywords, imagePrompt, slug) must be written in ${args.languageName}. Slug stays in lower-case latin letters where possible (transliterate if the language uses another script).`,
+    `Target audience: readers in ${args.countryName}. Frame trends, references, and tone for that audience.`,
     "",
     `Site category: ${args.cat.CatName} (slug: ${args.cat.CatSeo})`,
     args.cat.CatDesc ? `Category description: ${args.cat.CatDesc}` : "",
@@ -419,6 +443,8 @@ function buildRouterUserPrompt(args: {
   existingByCat: Map<number, string[]>;
   batch: number;
   guidance: string;
+  languageName: string;
+  countryName: string;
 }): string {
   const catList = args.cats
     .map(
@@ -449,6 +475,9 @@ function buildRouterUserPrompt(args: {
   return [
     currentDateContext(),
     "",
+    `Output language: ${args.languageName}. Every text field (title, summary, keywords, imagePrompt, slug) must be written in ${args.languageName}. Slug stays in lower-case latin letters where possible (transliterate if the language uses another script).`,
+    `Target audience: readers in ${args.countryName}. Frame trends, references, and tone for that audience.`,
+    "",
     `You are routing trending queries into the correct site category and turning them into clean editorial article ideas.`,
     "",
     `Available categories (pick categoryId from THIS list only):`,
@@ -472,13 +501,15 @@ function buildRouterUserPrompt(args: {
 
 const DEFAULT_IDEATION_SYSTEM = `You are a magazine editor turning RECENT search trend signals into article ideas that real readers will click and actually read. The trend list represents what people are searching for in the past few days, so treat them as the news cycle of the moment, not as evergreen reference material.
 
-The trends you'll see are noisy. They may be fragmentary ("nvidia 50"), pure brand mentions ("samsung s26"), or weird query-speak ("python latest"). Treat each trend as a hint, never as the headline. Rewrite into a clean, readable line you'd see on a respected news or tech site, with an angle that explains what is happening right now around that query.
+Output language is set in the user message ("Output language: …"). Every text field you produce — title, summary, keywords, imagePrompt — must be written natively in THAT language, not translated from English. Slug stays in lower-case latin letters; transliterate non-latin scripts.
+
+The trends you'll see are noisy. They may be fragmentary ("nvidia 50"), pure brand mentions ("samsung s26"), or weird query-speak ("python latest"). Trends are often in a different language than the output. Treat each trend as a hint, never as the headline. Rewrite into a clean, readable line you'd see on a respected news or tech site in the output language, with an angle that explains what is happening right now around that query.
 
 Headline craft:
 - Lead with a specific subject, person, place, or event when the trend gives you one. If the trend is too thin to yield a real angle, drop it instead of padding with filler.
-- Vary structure across the batch. Mix declarative news leads, "How..." service pieces, "Why..." explainers, profile leads, and short hard-news lines. Do not repeat the same template twice in a row.
+- Vary structure across the batch. Mix declarative news leads, service pieces ("How to…"), explainers ("Why…"), profile leads, and short hard-news lines, expressed naturally in the output language. Do not repeat the same template twice in a row.
 - 50 to 75 characters is a good range. Go shorter when the angle is sharp.
-- Plain English. Skip marketing verbs like transforms, revolutionizes, redefines, unleashes, supercharges, game-changing. Avoid title-case noun stacks (no "Survival Horror Enemy Behavior" style) and write the way a person would say it out loud.
+- Plain prose in the output language. Skip marketing verbs (the equivalents of "transforms", "revolutionizes", "game-changing"). Avoid title-case noun stacks and write the way a person would say it out loud.
 - Do not pad headlines with the category name. If the piece sits in the "AI" category, you do not need every title to start with "AI ...".
 - No emoji. No ALL CAPS except real acronyms (AI, NASA, GDP). No clickbait. No question titles you immediately answer.
 
@@ -488,13 +519,15 @@ Punctuation rules (strict, apply to every field you write):
 - Do not end any field with an ellipsis.
 
 Field rules:
-- title: see headline craft above.
-- summary: one or two natural sentences, up to 220 characters. Sounds like a journalist describing the piece, not a meta description.
-- keywords: 5 to 8 lowercase, comma-separated, in order of relevance. They should fit the body naturally; do not pick keywords just to chase ranking.
-- imagePrompt: up to 200 characters describing a plausible scene a photojournalist could actually shoot. No text, logos, watermarks.
-- slug: kebab-case, 4 to 10 words.
+- title: see headline craft above. In the output language.
+- summary: one or two natural sentences in the output language, up to 220 characters. Sounds like a journalist describing the piece, not a meta description.
+- keywords: 5 to 8 lowercase, comma-separated, in order of relevance, written in the output language. They should fit the body naturally; do not pick keywords just to chase ranking.
+- imagePrompt: up to 200 characters describing a plausible scene a photojournalist could actually shoot. May be written in English (image models read English best). No text, logos, watermarks.
+- slug: kebab-case, 4 to 10 words. Always lower-case latin; transliterate from the output language if needed.
 - trendQuery: copy the exact trending query that inspired this idea.
 - categoryId (when a category list is provided): pick the integer ID from that list whose readers would care most. Do not invent IDs.
+
+Editorial safety: titles and summaries must not give medical, legal, or individualized financial advice. Do not phrase ideas as "take X to cure Y", "sue your landlord by doing Z", "buy/sell stock X now". Frame health, legal, and finance ideas as reporting on what experts, studies, rulings, or named sources say, not as direct instructions to the reader.
 
 Skip ruthlessly. A short, sharp batch beats a padded one. If a trend yields no clean angle for any category, drop it.
 

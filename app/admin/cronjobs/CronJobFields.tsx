@@ -56,40 +56,12 @@ const NEWSNOW_CATEGORIES = [
   "WORLD",
 ];
 
-const NEWSNOW_LOCATIONS = [
-  { value: "us", label: "United States" },
-  { value: "gb", label: "United Kingdom" },
-  { value: "ca", label: "Canada" },
-  { value: "au", label: "Australia" },
-  { value: "in", label: "India" },
-  { value: "de", label: "Germany" },
-  { value: "fr", label: "France" },
-  { value: "tr", label: "Türkiye" },
-  { value: "es", label: "Spain" },
-  { value: "it", label: "Italy" },
-  { value: "br", label: "Brazil" },
-  { value: "mx", label: "Mexico" },
-  { value: "jp", label: "Japan" },
-  { value: "kr", label: "South Korea" },
-];
-
 const TRENDS_WINDOWS: { value: string; label: string; hint: string }[] = [
   { value: "now 1-d", label: "Past 24 hours", hint: "Riding today's news cycle. Best for breaking-news categories." },
   { value: "now 7-d", label: "Past 7 days", hint: "Default. Fresh enough to feel timely, deep enough to dedupe." },
   { value: "today 1-m", label: "Past 30 days", hint: "Slower-moving niches. Less risk of repeating yesterday's piece." },
   { value: "today 3-m", label: "Past 90 days", hint: "Quarterly seasonality. Use when 30 days is too thin." },
   { value: "today 12-m", label: "Past 12 months", hint: "Evergreen seed. SerpAPI's own default." },
-];
-
-const NEWSNOW_LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "es", label: "Español" },
-  { value: "fr", label: "Français" },
-  { value: "de", label: "Deutsch" },
-  { value: "it", label: "Italiano" },
-  { value: "pt", label: "Português" },
-  { value: "tr", label: "Türkçe" },
-  { value: "ar", label: "العربية" },
 ];
 
 export function CronJobFields({
@@ -261,20 +233,14 @@ export function CronJobFields({
               </div>
             </div>
             <div className="form-row">
-              <label htmlFor="Location">Location</label>
-              <select id="Location" name="Location" defaultValue={cfg.location ?? "us"}>
-                {NEWSNOW_LOCATIONS.map((l) => (
-                  <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-row">
-              <label htmlFor="Language">Language</label>
-              <select id="Language" name="Language" defaultValue={cfg.language ?? "en"}>
-                {NEWSNOW_LANGUAGES.map((l) => (
-                  <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
-                ))}
-              </select>
+              <label>Location &amp; language</label>
+              <div>
+                <small>
+                  Inherited from <strong>Settings → Target country</strong> and
+                  <strong> Site language</strong>. Change them there to retarget
+                  every news/article cron at once.
+                </small>
+              </div>
             </div>
             <div className="form-row">
               <label htmlFor="Page">Page</label>
@@ -437,29 +403,14 @@ export function CronJobFields({
         </div>
 
         <div className="form-row">
-          <label htmlFor="TrendsLocation">Location (trends)</label>
-          <select
-            id="TrendsLocation"
-            name="TrendsLocation"
-            defaultValue={(cfg.trendsLocation as string | undefined) ?? "us"}
-          >
-            {NEWSNOW_LOCATIONS.map((l) => (
-              <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label htmlFor="TrendsLanguage">Language (trends)</label>
-          <select
-            id="TrendsLanguage"
-            name="TrendsLanguage"
-            defaultValue={(cfg.trendsLanguage as string | undefined) ?? "en"}
-          >
-            {NEWSNOW_LANGUAGES.map((l) => (
-              <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
-            ))}
-          </select>
+          <label>Trends geo &amp; language</label>
+          <div>
+            <small>
+              Inherited from <strong>Settings → Target country</strong> and
+              <strong> Site language</strong>. SerpAPI&apos;s <code>geo</code> and
+              <code> hl</code> params follow those.
+            </small>
+          </div>
         </div>
 
         <div className="form-row">

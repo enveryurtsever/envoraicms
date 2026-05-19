@@ -10,6 +10,11 @@ import { requireApiKey } from "@/lib/ingest/config";
 import { getPromptTemplate } from "@/lib/queries/prompts";
 import { fixSearchLinks } from "@/lib/ingest/sanitize-links";
 import { currentDateContext } from "@/lib/ingest/prompt-context";
+import { getSettings } from "@/lib/queries/settings";
+import {
+  languageEnglishName,
+  locationEnglishName,
+} from "@/lib/site-language";
 import type { TextAIClient } from "./index";
 
 /** TextAIClient adapter for Gemini, used by the multi-provider article
@@ -52,8 +57,14 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 90);
 }
 
-export const REWRITE_SYSTEM = `You rewrite news articles for a US-audience English news site.
+/** System prompt for the news rewriter. Two placeholders ({language},
+ *  {country}) are substituted at call site so the same template works for any
+ *  configured site language/region. The default values are US English so a
+ *  caller that forgets to substitute still gets sensible output. */
+export const REWRITE_SYSTEM = `You rewrite news articles for a {country} audience news site, in {language}.
 Goal: humanized, original prose that passes AI detectors and is SEO-optimized. Do NOT copy sentences verbatim from the source.
+
+Output language: {language}. Write the entire rewrite — every field — natively in {language}, not translated from the source. The source article may be in a different language; treat it as raw material and produce native-quality {language} copy. Slug stays in lower-case latin letters; transliterate if {language} uses another script.
 
 FIRST, evaluate whether the source is a real news story worth rewriting. Set skip=true (and leave other fields empty) if ANY of these apply:
 - Body is mostly advertising, affiliate promotion, sponsored content, coupons, deals, or product placement
@@ -96,14 +107,19 @@ Internal keyword linking (IMPORTANT):
 - Only link the FIRST occurrence of each chosen keyword. Pick named entities (people, places, organizations, events), not generic adjectives.
 - Never put a link inside a heading.
 
-Tone: professional journalism. Confident, calm, specific. Report. Do not editorialize. Do not summarize at the end with a "looking forward" wrap-up. Vary sentence and paragraph length. Do not use the same connective ("Moreover", "Furthermore", "Additionally") more than once across the whole piece.
+Tone: professional journalism in {language}. Confident, calm, specific. Report. Do not editorialize. Do not summarize at the end with a "looking forward" wrap-up. Vary sentence and paragraph length. Do not repeat the same connective word (the {language} equivalents of "Moreover" / "Furthermore" / "Additionally") more than once across the whole piece.
 
 Punctuation rules (strict, non-negotiable, apply to every field you produce):
 - Never use the em dash character. If you want a pause, use a comma, a period, a colon, parentheses, or rewrite the sentence.
 - Never use the en dash character. Plain hyphens inside compound words are fine.
 - Do not end any field with an ellipsis.
 
-Banned phrases and AI tells (do not use any of these): delve, delving into, in the realm of, navigating the landscape, paradigm shift, leverage (as a verb), unlock the power of, in today's [adjective] world, the world of [noun], game-changing, revolutionary, cutting-edge, robust, seamless, unparalleled, "it is important to note", "it is worth noting", tapestry of, transforms or is transforming.`;
+Avoid AI tells and marketing language in {language}. Do not use the {language} equivalents of: "delve into", "in the realm of", "navigating the landscape", "paradigm shift", "leverage" (as a verb), "unlock the power of", "in today's [X] world", "the world of [X]", "game-changing", "revolutionary", "cutting-edge", "robust", "seamless", "unparalleled", "it is important to note", "it is worth noting", "tapestry of", "transforms" / "is transforming". Write the way a real {language} journalist would, not the way a translator outputs press releases.
+
+Editorial safety — strict:
+- Do NOT give medical advice. Do not tell readers what to take, what dose, when to stop a medication, or what to do for symptoms. You may report what doctors, studies, regulators, or named sources say, attributed to them. End any health-adjacent piece with a single line in {language} along the lines of "consult a qualified healthcare professional for personal medical advice"; do not phrase it as part of the body prose.
+- Do NOT give legal advice. Do not tell readers what to file, what to sign, how to argue a case, or what their rights are in their specific situation. You may report on laws, rulings, or what attorneys / officials state, attributed to them. End any legal-adjacent piece with a single line in {language} along the lines of "consult a qualified attorney for advice on your situation".
+- Do NOT give individualized financial, tax, or investment instructions either; same rule — report what experts and filings say, attribute it, do not instruct the reader to buy/sell/file.`;
 
 export async function makeGeminiProvider(): Promise<TextAiProvider> {
   const key = await requireApiKey("gemini", "text_ai");
@@ -124,8 +140,15 @@ export async function makeGeminiProvider(): Promise<TextAiProvider> {
       const bodyText = fullContent
         ? fullContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 8000)
         : "";
-      const systemTemplate = (await getPromptTemplate("ingest_system")) || REWRITE_SYSTEM;
+      const settings = await getSettings();
+      const languageName = languageEnglishName(settings.SiteLanguage);
+      const countryName = locationEnglishName(settings.SiteLocation);
+      const systemTemplate = ((await getPromptTemplate("ingest_system")) || REWRITE_SYSTEM)
+        .replace(/\{language\}/g, languageName)
+        .replace(/\{country\}/g, countryName);
       const prompt = `${currentDateContext()}
+
+Output language: ${languageName}. Target audience: readers in ${countryName}.
 
 Category: ${cat.CatName}
 Original title: ${article.title}
@@ -137,7 +160,7 @@ Source keywords: ${article.keywords?.join(", ") ?? ""}
 Publisher: ${article.publisher?.name ?? "Unknown"}
 URL: ${article.url}
 
-Rewrite this as an original article following the rules above. Return JSON only.`;
+Rewrite this as an original article in ${languageName} following the rules above. Return JSON only.`;
 
       const res = await model.generateContent([
         { text: systemTemplate },

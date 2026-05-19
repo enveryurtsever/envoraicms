@@ -7,7 +7,7 @@ import type { Settings, Theme } from "@/lib/types";
 import { Tabs } from "@/components/admin-ui/Tabs";
 import { useToast } from "@/components/admin-ui/Toast";
 import { AIInputRow } from "@/components/admin-ui/AIWand";
-import { SITE_LANGUAGES } from "@/lib/site-language";
+import { SITE_LANGUAGES, SITE_LOCATIONS } from "@/lib/site-language";
 import { saveSettings } from "./actions";
 import { SocialLinksField } from "./SocialLinksField";
 
@@ -123,7 +123,29 @@ function GeneralTab({ settings }: { settings: Settings }) {
           </select>
           <small>
             Drives <code>&lt;html lang&gt;</code>, JSON-LD <code>inLanguage</code>,
-            OpenGraph <code>og:locale</code>, and the news sitemap language tag.
+            OpenGraph <code>og:locale</code>, the news sitemap language tag,
+            and the language all AI-generated content is written in.
+          </small>
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="SiteLocation">Target country</label>
+        <div>
+          <select
+            id="SiteLocation"
+            name="SiteLocation"
+            defaultValue={settings.SiteLocation ?? "US"}
+          >
+            {SITE_LOCATIONS.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label} ({l.code})
+              </option>
+            ))}
+          </select>
+          <small>
+            ISO country code passed to NewsNow (news source) and SerpAPI
+            (Google Trends seed). Decides which country&apos;s news and trends
+            the ingestion pipeline pulls.
           </small>
         </div>
       </div>

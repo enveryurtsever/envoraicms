@@ -31,6 +31,9 @@ export type Settings = {
   PrimaryColor: string | null;
   SecondaryColor: string | null;
   SiteLanguage: string | null;
+  /** ISO-2 country code, upper-case (e.g. "US","TR"). Targets news/trend
+   *  providers and is used as the geographical anchor in AI prompts. */
+  SiteLocation: string | null;
   DefaultColorMode: "light" | "dark" | "system" | null;
   AllowColorToggle: boolean;
   ShowHeaderMenu: boolean;
@@ -84,21 +87,20 @@ export type ApiKey = {
 export type CronJobStatus = "ok" | "error" | "skipped" | null;
 
 export type CronJobConfig = {
-  // Common to news pipeline (NewsNow)
+  // News pipeline (NewsNow). Location/language are NOT here — they come from
+  // Settings.SiteLocation / Settings.SiteLanguage so the whole site stays
+  // consistent.
   newsCategory?: string;   // NewsNow category enum (BUSINESS, TECHNOLOGY, ...)
-  location?: string;       // ISO-2 country
-  language?: string;       // ISO-2 language
   page?: number;           // pagination cursor (default 1)
 
-  // Article pipeline (SerpAPI + multi-provider AI)
+  // Article pipeline (SerpAPI + multi-provider AI). Trend geo/language also
+  // come from Settings; only the angle/window/batch knobs live per-job here.
   routerMode?: boolean;          // true = seed/route trends across all active categories
   seedQuery?: string;            // single-cat mode only: "AI productivity tools"
   targetCatId?: number;          // single-cat mode only: site category to file under
   maxCategoriesPerTick?: number; // router mode: cap on categories hit per refill (SerpAPI quota)
   perCategoryTrendLimit?: number;// router mode: trends to fetch per category (default 8)
   ideationBatchCount?: number;   // how many drafts to ideate per refill (10/20/30)
-  trendsLocation?: string;       // ISO-2 country for SerpAPI
-  trendsLanguage?: string;       // ISO-2 language for SerpAPI
   trendsWindow?: string;         // SerpAPI date enum (default "now 7-d")
   autoRefill?: boolean;          // when pending=0, auto-trigger ideation
   publishStaggerMinutes?: number;// gap between publish dates of articles inserted in the same tick (default 15)

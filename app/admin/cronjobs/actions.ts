@@ -18,6 +18,8 @@ import { makeNewsApi14Provider } from "@/lib/ingest/providers/news/newsapi14";
 import { makeGeminiProvider } from "@/lib/ingest/providers/text/gemini";
 import { makeFalaiProvider } from "@/lib/ingest/providers/image/falai";
 import { makePassthroughProvider } from "@/lib/ingest/providers/image/passthrough";
+import { getSettings } from "@/lib/queries/settings";
+import { newsnowLocation, newsLanguage } from "@/lib/site-language";
 import type {
   CronJobConfig,
   CronJobKind,
@@ -108,13 +110,9 @@ function parseForm(fd: FormData): Parsed | string {
     const provider = str(fd, "NewsProvider");
     if (provider === "newsnow") {
       const newsCategory = str(fd, "NewsCategory");
-      const location = str(fd, "Location");
-      const language = str(fd, "Language");
       const page = num(fd, "Page", 1);
       if (!newsCategory) return "newsnow_category";
       config.newsCategory = newsCategory.toUpperCase();
-      if (location) config.location = location.toLowerCase();
-      if (language) config.language = language.toLowerCase();
       if (page > 0) config.page = page;
     }
 
@@ -163,12 +161,8 @@ function parseForm(fd: FormData): Parsed | string {
     5,
     Math.min(50, num(fd, "IdeationBatchCount", 20)),
   );
-  const trendsLocation = str(fd, "TrendsLocation");
-  const trendsLanguage = str(fd, "TrendsLanguage");
   const trendsWindow = str(fd, "TrendsWindow");
   const guidance = str(fd, "Guidance");
-  if (trendsLocation) config.trendsLocation = trendsLocation.toLowerCase();
-  if (trendsLanguage) config.trendsLanguage = trendsLanguage.toLowerCase();
   if (trendsWindow) config.trendsWindow = trendsWindow;
   if (guidance) config.guidance = guidance;
   config.autoRefill = bool(fd, "AutoRefill");
@@ -290,12 +284,13 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
     } else if (job.NewsProvider === "newsnow") {
       const cfg = job.Config ?? {};
       if (!cfg.newsCategory) throw new Error("NewsNow category missing in job config.");
+      const settings = await getSettings();
       const outcome = await runNewsNowJob({
         cronId: job.CronID,
         params: {
           category: cfg.newsCategory,
-          location: cfg.location,
-          language: cfg.language,
+          location: newsnowLocation(settings.SiteLocation),
+          language: newsLanguage(settings.SiteLanguage),
           page: cfg.page,
         },
         articlesPerRun: job.ArticlesPerRun,

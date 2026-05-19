@@ -2,6 +2,11 @@ import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { requireApiKey } from "@/lib/ingest/config";
 import { getPromptTemplate } from "@/lib/queries/prompts";
+import { getSettings } from "@/lib/queries/settings";
+import {
+  languageEnglishName,
+  locationEnglishName,
+} from "@/lib/site-language";
 
 export type SuggestField =
   | "title"
@@ -35,7 +40,9 @@ function ctxBlock(keys: Array<[string, string | null | undefined]>): string {
   return keys.map(([k, v]) => pair(k, v)).filter(Boolean).join("\n");
 }
 
-const SYSTEM = `You are an SEO editor for a US English news site. Reply with ONE JSON object: {"suggestion": string}. No prose, no markdown fences, no trailing commentary.`;
+function buildSystem(languageName: string, countryName: string): string {
+  return `You are an SEO editor for a news site that targets ${countryName} readers and publishes in ${languageName}. Write the suggestion natively in ${languageName} (slugs stay lower-case latin; transliterate if ${languageName} uses another script). Do not give medical, legal, or individualized financial advice in the suggestion — report what experts/sources say, do not instruct the reader. Reply with ONE JSON object: {"suggestion": string}. No prose, no markdown fences, no trailing commentary.`;
+}
 
 function contextFor(field: SuggestField, ctx: Ctx): string {
   const title = ctx.title;
@@ -107,9 +114,13 @@ export async function suggestField(field: SuggestField, ctx: Ctx): Promise<strin
     generationConfig: { responseMimeType: "application/json" },
   });
 
+  const settings = await getSettings();
+  const languageName = languageEnglishName(settings.SiteLanguage);
+  const countryName = locationEnglishName(settings.SiteLocation);
+
   const userPrompt = await buildPrompt(field, ctx);
   const res = await model.generateContent([
-    { text: SYSTEM },
+    { text: buildSystem(languageName, countryName) },
     { text: userPrompt },
   ]);
   const text = res.response.text();

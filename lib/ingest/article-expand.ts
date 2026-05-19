@@ -9,6 +9,11 @@ import { makeFalaiProvider } from "./providers/image/falai";
 import { downloadAndStoreImage } from "./download-image";
 import { fixSearchLinks } from "./sanitize-links";
 import { currentDateContext } from "./prompt-context";
+import { getSettings } from "@/lib/queries/settings";
+import {
+  languageEnglishName,
+  locationEnglishName,
+} from "@/lib/site-language";
 import type { AuthorPicker } from "@/lib/queries/authors";
 import {
   buildContentUrl,
@@ -55,9 +60,21 @@ export async function expandArticleDraft(args: {
   const contentAI = await getActiveTextAI("content");
   log.push(`[draft#${draft.DraftID}] content provider=${contentAI.name}`);
 
-  const systemPrompt =
+  const settings = await getSettings();
+  const languageName = languageEnglishName(settings.SiteLanguage);
+  const countryName = locationEnglishName(settings.SiteLocation);
+
+  const systemTemplate =
     (await getPromptTemplate("article_expand")) || DEFAULT_EXPAND_SYSTEM;
-  const userPrompt = buildExpandPrompt({ draft, category });
+  const systemPrompt = systemTemplate
+    .replace(/\{language\}/g, languageName)
+    .replace(/\{country\}/g, countryName);
+  const userPrompt = buildExpandPrompt({
+    draft,
+    category,
+    languageName,
+    countryName,
+  });
 
   const expanded = await contentAI.generateJSON<ExpandedArticle>({
     system: systemPrompt,
@@ -189,10 +206,15 @@ function validateExpanded(v: ExpandedArticle): void {
 function buildExpandPrompt(args: {
   draft: ArticleDraft;
   category: IngestCategory;
+  languageName: string;
+  countryName: string;
 }): string {
   const d = args.draft;
   return [
     currentDateContext(),
+    "",
+    `Output language: ${args.languageName}. Every text field (title, short, detail, keywords, desc, slug, imagePrompt) must be written natively in ${args.languageName}. Slug stays in lower-case latin letters; transliterate if the language uses another script.`,
+    `Target audience: readers in ${args.countryName}. Pick examples, sources, and tone for that audience.`,
     "",
     `Site category: ${args.category.CatName} (slug: ${args.category.CatSeo})`,
     `Source trend (search query that inspired this piece): ${d.TrendQuery ?? "(none)"}`,
@@ -200,27 +222,30 @@ function buildExpandPrompt(args: {
     d.Summary ? `Seed summary: ${d.Summary}` : "",
     d.Keywords ? `Seed keywords: ${d.Keywords}` : "",
     "",
-    "Write a fresh, US-audience English article from this brief. The trend that inspired the piece was searched in the past few days, so treat the angle as current news, not evergreen reference. Lead with a concrete fact, scene, or named person in the very first sentence; do not restate the headline. No 'in this article we will explore' or similar throat-clearing.",
+    `Write a fresh article in ${args.languageName} from this brief. The trend that inspired the piece was searched in the past few days, so treat the angle as current news, not evergreen reference. Lead with a concrete fact, scene, or named person in the very first sentence; do not restate the headline. No throat-clearing intro phrases.`,
     "Return strict JSON with: title, short, detail (HTML), keywords, desc, slug, imagePrompt, importance (1-10).",
     "The detail must be 700-1000 words, calm professional journalism tone, with two or three <h2> section headings that break the article into distinct angles (e.g. context / what's new / why it matters), at least one direct quote with attribution, and 3 to 5 internal search links of the form <a href=\"/search/KEYWORD\">phrase</a>.",
     "Paragraph rule: keep each <p> short, 2 to 4 sentences max, never longer than ~80 words. Long paragraphs read as wall-of-text. If you have more material on one point, split it into two paragraphs or move part of it under an <h2>.",
     "When the source enumerates items (bug fixes, features, models, products), use a <ul><li> list rather than packing them into one long paragraph. Lists are also preferred over prose for any sequence of three or more parallel items.",
-    "Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. If a bug or issue is mentioned, summarize it in plain English; only include an ID inline when it adds reader value, and at most once or twice per article.",
+    "Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. If a bug or issue is mentioned, summarize it in plain prose; only include an ID inline when it adds reader value, and at most once or twice per article.",
     "Allowed tags: <p>, <h2>, <h3>, <strong>, <em>, <ul>, <ol>, <li>, <a>, <blockquote>. No <html>, <body>, <script>, <img>, <iframe>.",
     "Punctuation: never use the em dash or en dash characters anywhere (title, short, detail, desc, imagePrompt). Use commas, periods, colons, parentheses, or rewrite. Hyphens inside compound words are fine.",
+    "imagePrompt may be written in English (image models read English best); all other fields stay in the output language.",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-const DEFAULT_EXPAND_SYSTEM = `You write the full article from an editorial brief. The brief gives you a category, a seed title, a short summary, keywords, and the trending query that inspired the piece. You are writing for a smart general English-speaking audience that reads news and tech magazines, not for an SEO crawler.
+const DEFAULT_EXPAND_SYSTEM = `You write the full article from an editorial brief. The brief gives you a category, a seed title, a short summary, keywords, and the trending query that inspired the piece.
+
+Output language is set in the user message ("Output language: …"). Write the entire article — every field — natively in THAT language, not translated from English. You are writing for a smart general reader of that language who reads news and tech magazines, not for an SEO crawler.
 
 Voice and style:
-- Sound like a real journalist with a beat. Confident, calm, specific. No hedging filler such as "in this article we will explore", "in today's fast-paced world", "let's dive in".
+- Sound like a real journalist with a beat. Confident, calm, specific. No hedging intro filler.
 - Lead with a fact, scene, or named person in the first sentence. Do not open by restating the headline.
-- Vary sentence and paragraph length. Some short, some longer. Do not use the same connective ("Moreover", "Furthermore", "Additionally") more than once across the whole piece.
+- Vary sentence and paragraph length. Some short, some longer. Do not repeat the same connective word ("Moreover" / "Furthermore" / their equivalents in the output language) more than once across the whole piece.
 - Quote at least one named source. If the brief does not supply one, attribute to a plausible expert with a real-sounding role and organization. Keep quotes short and conversational, not corporate.
-- Use specific numbers, dates, and proper nouns where they help. Avoid vague "many", "some", or "recently" without backing.
+- Use specific numbers, dates, and proper nouns where they help. Avoid vague "many", "some", "recently" (or their equivalents) without backing.
 - Do not moralize, do not editorialize, do not close with a "looking forward" wrap-up paragraph.
 
 Punctuation rules (strict, non-negotiable, apply to every field you produce):
@@ -229,9 +254,12 @@ Punctuation rules (strict, non-negotiable, apply to every field you produce):
 - Do not use semicolons inside the title or short.
 - Do not end any field with an ellipsis.
 
-Banned phrases and AI tells (do not use any of these):
-- delve, delving into, in the realm of, navigating the landscape, paradigm shift, leverage (as a verb), unlock the power of, in today's [adjective] world, the world of [noun], game-changing, revolutionary, cutting-edge, robust, seamless, unparalleled, "it is important to note", "it is worth noting", tapestry of.
-- Do not write "transforms" or "is transforming" in the title.
+Avoid AI tells and marketing language in any output language: phrases that translate to "delve into", "in the realm of", "paradigm shift", "unlock the power of", "in today's [X] world", "game-changing", "revolutionary", "cutting-edge", "robust", "seamless", "unparalleled", "it is important to note", "it is worth noting", "transforms" / "is transforming". Skip the local equivalents of these as well.
+
+Editorial safety — strict, applies to title, short, detail, desc:
+- Do NOT give medical advice. Do not tell readers what to take, what dose, when to stop a medication, or what to do for symptoms. You may report what doctors, studies, regulators, or named sources say, attributed to them. If the piece is health-adjacent, end the detail with a single line in the output language to the effect of "consult a qualified healthcare professional for personal medical advice"; keep it as a standalone closing paragraph.
+- Do NOT give legal advice. Do not tell readers what to file, what to sign, how to argue a case, or what their rights are in their specific situation. You may report on laws, rulings, or what attorneys / officials state, attributed to them. If the piece is legal-adjacent, end the detail with a single line in the output language to the effect of "consult a qualified attorney for advice on your situation".
+- Do NOT give individualized financial, tax, or investment instructions either; same rule — report what experts and filings say, attribute it, do not instruct the reader to buy/sell/file.
 
 JSON keys:
 - title: a real-sounding headline. Do not force the keyword to the front. Do not end with a stacked-noun phrase. 50 to 75 characters typical.
@@ -242,14 +270,14 @@ JSON keys:
     3. Two or three <h2> subheadings that break the article into distinct angles (e.g. context, what's new, why it matters). Headings must signal a real shift in topic, not just a label.
     4. Keep each <p> short: 2 to 4 sentences, never longer than ~80 words. Wall-of-text paragraphs are not acceptable. Split or move material under an <h2> instead.
     5. Use a <ul><li> list whenever the source enumerates three or more parallel items (bug fixes, features, products). Do not pack enumerations into a single long paragraph.
-    6. Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. Summarize the issue in plain English; include an ID inline only when it adds reader value, at most once or twice per article.
-    7. Specific numbers, dates, proper nouns. No vague "some", "many", "recently".
+    6. Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. Summarize the issue in plain prose; include an ID inline only when it adds reader value, at most once or twice per article.
+    7. Specific numbers, dates, proper nouns. No vague hedge words.
     8. Vary paragraph length within the 2-4 sentence cap.
     9. Allowed tags: <p>, <h2>, <h3>, <strong>, <em>, <ul>, <ol>, <li>, <a>, <blockquote>. NO <html>, <body>, <script>, <img>, <iframe>.
-- keywords: 5 to 8 lowercase, comma-separated, in order of relevance. The first should appear in the body naturally.
-- desc: meta description 150 to 160 characters that reads like a real summary, not a keyword stuff.
-- slug: kebab-case 4 to 10 words, descriptive.
-- imagePrompt: up to 200 characters, photojournalistic, no text or logos or watermarks.
+- keywords: 5 to 8 lowercase, comma-separated, in order of relevance, in the output language. The first should appear in the body naturally.
+- desc: meta description 150 to 160 characters that reads like a real summary, not keyword stuffing.
+- slug: kebab-case 4 to 10 words, lower-case latin letters (transliterate if the output language uses another script).
+- imagePrompt: up to 200 characters, photojournalistic, no text or logos or watermarks. May be written in English (image models read English best).
 - importance: integer 1 to 10 (typical evergreen 4 to 6).
 
 Internal keyword linking inside detail:

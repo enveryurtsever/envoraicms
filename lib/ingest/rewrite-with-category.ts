@@ -10,6 +10,11 @@ import { getPromptTemplate } from "@/lib/queries/prompts";
 import { REWRITE_SYSTEM } from "@/lib/ingest/providers/text/gemini";
 import { fixSearchLinks } from "@/lib/ingest/sanitize-links";
 import { currentDateContext } from "@/lib/ingest/prompt-context";
+import { getSettings } from "@/lib/queries/settings";
+import {
+  languageEnglishName,
+  locationEnglishName,
+} from "@/lib/site-language";
 
 function slugify(s: string): string {
   return s
@@ -53,8 +58,14 @@ export async function rewriteWithCategory(args: {
     generationConfig: { responseMimeType: "application/json" },
   });
 
+  const settings = await getSettings();
+  const languageName = languageEnglishName(settings.SiteLanguage);
+  const countryName = locationEnglishName(settings.SiteLocation);
+
   const baseTemplate = (await getPromptTemplate("ingest_system")) || REWRITE_SYSTEM;
-  const systemPrompt = baseTemplate + CATEGORY_INSTRUCTIONS;
+  const systemPrompt = (baseTemplate + CATEGORY_INSTRUCTIONS)
+    .replace(/\{language\}/g, languageName)
+    .replace(/\{country\}/g, countryName);
 
   const categoryList = categories
     .map((c) => `- ${c.CatSeo} :: ${c.CatName}`)
@@ -62,6 +73,8 @@ export async function rewriteWithCategory(args: {
 
   const bodyText = strip(article.text ?? article.excerpt ?? "", 8000);
   const userPrompt = `${currentDateContext()}
+
+Output language: ${languageName}. Target audience: readers in ${countryName}.
 
 Site categories (slug :: name) — pick exactly one slug:
 ${categoryList || "(none defined)"}
@@ -75,8 +88,8 @@ ${bodyText}
 Publisher: ${article.publisher?.name ?? "Unknown"}
 URL: ${article.url}
 
-Rewrite this as an original article AND pick the best site category from the
-list above. Return JSON only.`;
+Rewrite this as an original article in ${languageName} AND pick the best site
+category from the list above. Return JSON only.`;
 
   const res = await model.generateContent([
     { text: systemPrompt },
