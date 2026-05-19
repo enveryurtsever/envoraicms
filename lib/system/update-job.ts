@@ -11,7 +11,10 @@ export type StepKey =
   | "install"
   | "migrate"
   | "build"
-  | "reload";
+  | "reload"
+  /** Only appended to job.steps when an update fails and the auto-rollback
+   *  procedure kicks in. Never present in a successful run. */
+  | "rollback";
 
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped";
 
@@ -56,16 +59,42 @@ const STEP_LABELS: Record<StepKey, string> = {
   migrate: "Apply DB migrations",
   build: "Build (next build)",
   reload: "Reload PM2 process",
+  rollback: "Auto-rollback to previous version",
 };
 
+// Steps shown up-front when an update starts. "rollback" is intentionally
+// omitted — it's appended dynamically iff a failure triggers recovery, so
+// the happy-path UI doesn't show a confusing "pending rollback" row.
+const HAPPY_PATH_STEPS: StepKey[] = [
+  "backup",
+  "fetch",
+  "checkout",
+  "install",
+  "migrate",
+  "build",
+  "reload",
+];
+
 function newSteps(): Step[] {
-  return (Object.keys(STEP_LABELS) as StepKey[]).map((k) => ({
+  return HAPPY_PATH_STEPS.map((k) => ({
     key: k,
     label: STEP_LABELS[k],
     status: "pending",
     startedAt: null,
     endedAt: null,
   }));
+}
+
+function appendStep(job: UpdateJob, key: StepKey): Step {
+  const step: Step = {
+    key,
+    label: STEP_LABELS[key],
+    status: "pending",
+    startedAt: null,
+    endedAt: null,
+  };
+  job.steps.push(step);
+  return step;
 }
 
 export function getJob(): UpdateJob | null {
@@ -123,9 +152,21 @@ export function startUpdateJob(opts: {
   G.__updateJob = job;
 
   // Run asynchronously; the API route returns immediately.
-  void runUpdate(job).catch((err) => {
+  void runUpdate(job).catch(async (err) => {
     logLine(job, String(err instanceof Error ? err.stack ?? err.message : err), "error");
     job.error = err instanceof Error ? err.message : String(err);
+    // Keep status "running" through the rollback so the UI's polling loop
+    // (which stops on success/failed) keeps streaming rollback progress.
+    // Try to recover code to the pre-update commit. DB migrations are left
+    // in place (schema.sql is purely additive, so the old code tolerates
+    // extra columns it doesn't read).
+    await attemptRollback(job).catch((rbErr) => {
+      logLine(
+        job,
+        `[rollback] internal error: ${rbErr instanceof Error ? rbErr.message : String(rbErr)}`,
+        "error",
+      );
+    });
     job.status = "failed";
     job.endedAt = Date.now();
   });
@@ -246,6 +287,89 @@ async function runUpdate(job: UpdateJob): Promise<void> {
          so the UI doesn't hang waiting for it. */
     }
   }, 1000);
+}
+
+/** Auto-rollback procedure invoked when any update step throws. Restores
+ *  the working tree to the pre-update commit, reinstalls and rebuilds the
+ *  old code, then schedules a pm2 reload. DB is intentionally left alone:
+ *  schema.sql is purely additive (CREATE / ALTER ... IF NOT EXISTS), so
+ *  the old code tolerates whatever migrations had already applied. The
+ *  pre-update DB dump is still in `backupDir` if the operator wants to
+ *  restore it manually.
+ *
+ *  The function never throws — rollback failures are logged so the UI can
+ *  surface them, and the operator can fall back to the manual recovery
+ *  commands printed at the bottom of the log. */
+async function attemptRollback(job: UpdateJob): Promise<void> {
+  const step = appendStep(job, "rollback");
+  step.status = "running";
+  step.startedAt = Date.now();
+
+  const finish = (status: StepStatus) => {
+    step.status = status;
+    step.endedAt = Date.now();
+  };
+
+  if (!job.fromSha) {
+    logLine(
+      job,
+      `[rollback] no pre-update SHA recorded — cannot auto-rollback. ` +
+        `Manual: cd to install dir, find your previous version in git log, run "git reset --hard <sha>", "npm ci --include=dev", "npm run build", "pm2 reload envoraicms".`,
+      "error",
+    );
+    finish("failed");
+    return;
+  }
+
+  logLine(
+    job,
+    `[rollback] restoring code to ${job.fromSha.slice(0, 10)} (v${job.fromVersion || "?"})`,
+  );
+
+  try {
+    await runCommand("git", ["reset", "--hard", job.fromSha], {
+      onLine: lineCollector(job, "[rollback git]"),
+    });
+    await runCommand(
+      "npm",
+      ["ci", "--no-audit", "--no-fund", "--include=dev"],
+      {
+        env: { NODE_ENV: "development" },
+        onLine: lineCollector(job, "[rollback npm ci]"),
+      },
+    );
+    await runCommand("npm", ["run", "build"], {
+      env: { NODE_ENV: "production" },
+      onLine: lineCollector(job, "[rollback build]"),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logLine(job, `[rollback] FAILED: ${msg}`, "error");
+    logLine(
+      job,
+      `[rollback] Manual recovery: cd to install dir, run "git reset --hard ${job.fromSha}", "npm ci --include=dev", "npm run build", "pm2 reload envoraicms". DB backup is at ${job.backupDir ?? "(see backups/ folder)"}.`,
+      "error",
+    );
+    finish("failed");
+    return;
+  }
+
+  logLine(job, `[rollback] code restored; scheduling pm2 reload …`);
+  clearVersionCache();
+  setTimeout(() => {
+    try {
+      const child = spawn("pm2", ["reload", "envoraicms"], {
+        detached: true,
+        stdio: "ignore",
+        env: process.env,
+      });
+      child.unref();
+    } catch {
+      /* pm2 missing — operator must reload manually. The step is already
+         marked done so the UI doesn't hang. */
+    }
+  }, 1000);
+  finish("done");
 }
 
 export function clearJob(): void {

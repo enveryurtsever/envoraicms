@@ -299,27 +299,53 @@ export function UpdateClient({ initialStatus, initialJob, updaterEnabled }: Prop
             })}
           </ol>
 
-          {job.error ? (
-            <div
-              style={{
-                marginTop: "0.8rem",
-                padding: "0.7rem 0.9rem",
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                borderRadius: 8,
-                color: "#991b1b",
-                fontSize: "0.83rem",
-              }}
-            >
-              <strong>Error:</strong> {job.error}
-              {job.backupDir ? (
-                <div style={{ marginTop: 4, fontSize: "0.78rem" }}>
-                  Backup saved to <code>{job.backupDir}</code>. To roll back code only:{" "}
-                  <code>git reset --hard {job.fromSha.slice(0, 12) || job.fromVersion}</code>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          {job.error ? (() => {
+            const rb = job.steps.find((s) => s.key === "rollback");
+            const rolledBack = rb?.status === "done";
+            const rollbackFailed = rb?.status === "failed";
+            const rollbackRunning = rb?.status === "running";
+            return (
+              <div
+                style={{
+                  marginTop: "0.8rem",
+                  padding: "0.7rem 0.9rem",
+                  background: rolledBack ? "#fffbeb" : "#fef2f2",
+                  border: `1px solid ${rolledBack ? "#fde68a" : "#fecaca"}`,
+                  borderRadius: 8,
+                  color: rolledBack ? "#92400e" : "#991b1b",
+                  fontSize: "0.83rem",
+                }}
+              >
+                <strong>Error:</strong> {job.error}
+                {rollbackRunning ? (
+                  <div style={{ marginTop: 4, fontSize: "0.78rem" }}>
+                    Rolling back to v{job.fromVersion}… the site is held on the
+                    old code while this completes.
+                  </div>
+                ) : rolledBack ? (
+                  <div style={{ marginTop: 4, fontSize: "0.78rem" }}>
+                    Auto-rolled back to v{job.fromVersion}. The site keeps
+                    running on the previous version; DB backup at{" "}
+                    <code>{job.backupDir}</code>.
+                  </div>
+                ) : rollbackFailed ? (
+                  <div style={{ marginTop: 4, fontSize: "0.78rem" }}>
+                    Auto-rollback also failed. Recover manually: <code>cd</code>{" "}
+                    to the install dir, then{" "}
+                    <code>git reset --hard {job.fromSha.slice(0, 12) || job.fromVersion}</code>,{" "}
+                    <code>npm ci --include=dev</code>,{" "}
+                    <code>npm run build</code>,{" "}
+                    <code>pm2 reload envoraicms</code>. DB backup at{" "}
+                    <code>{job.backupDir}</code>.
+                  </div>
+                ) : job.backupDir ? (
+                  <div style={{ marginTop: 4, fontSize: "0.78rem" }}>
+                    Backup saved to <code>{job.backupDir}</code>.
+                  </div>
+                ) : null}
+              </div>
+            );
+          })() : null}
 
           {job.status === "success" ? (
             <div
