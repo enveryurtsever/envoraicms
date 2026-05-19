@@ -84,7 +84,7 @@ export const getSettings = cache(async () => {
     return {
       SettingsID: 0,
       Title: "ENVORAICMS",
-      Description: "ENVORAICMS — dinamik content platformu",
+      Description: "ENVORAICMS — dynamic content platform",
       Keywords: "news, content, cms",
       SiteName: "ENVORAICMS",
       SiteUrl: process.env.SITE_URL ?? "https://envoraicms.com",

@@ -1,10 +1,12 @@
 /**
- * İlk admin kullanıcısını oluşturur (interaktif).
+ * Create or reset the first admin user (interactive).
  *
  * Run: npm run seed:admin
  *
- * Ortam değişkenlerinden (ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME) okur;
- * yoksa stdin'den sorar. Var olan admin için parola sıfırlar.
+ * Reads ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME from the environment;
+ * falls back to stdin prompts when missing. If an admin with the same
+ * email already exists, the password is reset rather than a new row
+ * created.
  */
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
@@ -37,10 +39,10 @@ async function prompt(rl: ReturnType<typeof createInterface>, q: string, fallbac
 async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
   try {
-    const email = (process.env.ADMIN_EMAIL ?? (await prompt(rl, "Admin e-posta: "))).toLowerCase();
+    const email = (process.env.ADMIN_EMAIL ?? (await prompt(rl, "Admin email: "))).toLowerCase();
     if (!email) throw new Error("email required");
-    const name = process.env.ADMIN_NAME ?? (await prompt(rl, `Görünen ad [${email}]: `, email));
-    const password = process.env.ADMIN_PASSWORD ?? (await prompt(rl, "Şifre (>=8 char): "));
+    const name = process.env.ADMIN_NAME ?? (await prompt(rl, `Display name [${email}]: `, email));
+    const password = process.env.ADMIN_PASSWORD ?? (await prompt(rl, "Password (>=8 chars): "));
     if (password.length < 8) throw new Error("password too short (min 8)");
 
     const hash = await hashPassword(password);
@@ -57,14 +59,14 @@ async function main() {
           "IsActive"     = TRUE
         WHERE "UserID" = ${existing[0].UserID}
       `;
-      console.log(`[ok] mevcut admin güncellendi (UserID=${existing[0].UserID})`);
+      console.log(`[ok] existing admin updated (UserID=${existing[0].UserID})`);
     } else {
       const rows = await sql<{ UserID: number }[]>`
         INSERT INTO "Users" ("Email","DisplayName","PasswordHash","Role","IsActive")
         VALUES (${email}, ${name}, ${hash}, 'admin', TRUE)
         RETURNING "UserID"
       `;
-      console.log(`[ok] yeni admin oluşturuldu (UserID=${rows[0].UserID})`);
+      console.log(`[ok] new admin created (UserID=${rows[0].UserID})`);
     }
   } finally {
     rl.close();

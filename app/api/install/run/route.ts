@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
       addStep("Site settings updated", true);
     }
 
-    // 3. Varnumberlan promptlar
+    // 3. Default AI prompt templates
     for (const p of DEFAULT_PROMPTS) {
       await sql`
         INSERT INTO "Prompts" ("PromptKey", "Label", "Description", "Template")

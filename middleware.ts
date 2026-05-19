@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// İki iş: (1) tüm isteklere x-pathname header'ı ekle (root layout admin
-// yolunda site chrome'unu atlayabilsin diye). (2) /admin/* için session
-// cookie yoksa login'e yönlendir (DB doğrulaması admin layout'ta yapılır).
+// Two jobs: (1) attach an x-pathname header to every request so the root
+// layout can skip rendering site chrome on /admin routes; (2) redirect
+// /admin/* requests with no session cookie to /admin/login. Real DB-level
+// session validation happens in the admin layout — the cookie check here
+// is just a fast bounce so unauthenticated traffic never reaches the
+// server components.
 
 const COOKIE_NAME = "envoraicms_admin";
 
@@ -30,10 +33,10 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Next internals ve statik varlıklar hariç tüm yollar.
-    // `google[a-z0-9]+\.html` istisnası: Search Console / Indexing API
-    // sahiplik doğrulama dosyaları (public/ içinden serve edilir, dynamic
-    // route ile çakışmasın).
+    // Every path except Next internals and static assets. The
+    // `google[a-z0-9]+\.html` carve-out keeps Search Console / Indexing API
+    // ownership-verification files (served from public/) from colliding
+    // with the dynamic root route.
     "/((?!_next/|favicon.ico|Upload/|Content/|api/|google[a-z0-9]+\\.html).*)",
     "/admin/:path*",
   ],

@@ -57,10 +57,10 @@ async function main(): Promise<void> {
     `;
     const row = rows[0];
     if (!row?.IndexingServiceAccountJSON) {
-      die("Settings.IndexingServiceAccountJSON yok. /admin/indexing → Configuration sekmesinden SA JSON kaydet.");
+      die("Settings.IndexingServiceAccountJSON is empty. Save your SA JSON under /admin/indexing → Configuration first.");
     }
     if (!row.SiteUrl) {
-      die("Settings.SiteUrl yok. /admin/settings ekranından doldur.");
+      die("Settings.SiteUrl is empty. Set it under /admin/settings first.");
     }
 
     const siteUrl = row.SiteUrl.replace(/\/+$/, "") + "/";
@@ -72,31 +72,31 @@ async function main(): Promise<void> {
 
     const accessToken = await getAccessToken(sa, SCOPE);
 
-    console.log("[1/4] Verification token isteniyor…");
+    console.log("[1/4] Requesting verification token…");
     const verToken = await requestToken(accessToken, siteUrl);
     console.log(`      → ${verToken}`);
 
-    console.log("[2/4] Doğrulama dosyası public/ içine yazılıyor…");
+    console.log("[2/4] Writing verification file into public/…");
     const filePath = join(process.cwd(), "public", verToken);
     const fileBody = `google-site-verification: ${verToken}`;
     await writeFile(filePath, fileBody, "utf8");
     console.log(`      → ${filePath}`);
 
-    console.log("[3/4] Dosyanın internetten erişilebilirliği kontrol ediliyor…");
+    console.log("[3/4] Checking the file is reachable over the public internet…");
     const probeUrl = `${siteUrl}${verToken}`;
     await selfCheck(probeUrl, fileBody);
     console.log(`      → OK (${probeUrl})`);
 
-    console.log("[4/4] Google'dan sahiplik doğrulaması isteniyor…");
+    console.log("[4/4] Asking Google to verify ownership…");
     const result = await verifyOwnership(accessToken, siteUrl);
     const owners = (result.owners as string[] | undefined) ?? [];
-    console.log(`      → OK. owners: ${owners.join(", ") || "(boş döndü ama 200)"}`);
+    console.log(`      → OK. owners: ${owners.join(", ") || "(empty list, but 200)"}`);
 
     console.log("");
-    console.log("Tamam — service account artık verified owner.");
-    console.log(`Doğrulama dosyası (${filePath}) yerinde kalsın; Google periyodik olarak yeniden kontrol ediyor.`);
+    console.log("Done — the service account is now a verified owner.");
+    console.log(`Leave the verification file (${filePath}) in place; Google rechecks it periodically.`);
     console.log("");
-    console.log("Test: /admin/indexing → Manual submit → HTTP 200 beklenir.");
+    console.log("Test it: /admin/indexing → Manual submit → expect HTTP 200.");
   } finally {
     await sql.end({ timeout: 2 }).catch(() => {});
   }
@@ -186,10 +186,10 @@ async function selfCheck(url: string, expectedBody: string): Promise<void> {
         const body = (await res.text()).trim();
         if (body === expectedBody.trim()) return;
         if (attempt === 5) {
-          die(`URL erişilebilir ama içerik eşleşmiyor.\nbeklenen: ${expectedBody}\ngelen   : ${body.slice(0, 200)}`);
+          die(`URL is reachable but the body doesn't match.\nexpected: ${expectedBody}\ngot     : ${body.slice(0, 200)}`);
         }
       } else if (attempt === 5) {
-        die(`${url} erişilemez (HTTP ${res.status}). public/ servis ediliyor mu, PM2 ayakta mı?`);
+        die(`${url} is unreachable (HTTP ${res.status}). Is public/ being served? Is PM2 running?`);
       }
     } catch (err) {
       if (attempt === 5) die(`fetch failed: ${err instanceof Error ? err.message : String(err)}`);

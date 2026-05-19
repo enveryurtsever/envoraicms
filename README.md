@@ -1,195 +1,294 @@
 # Envoraicms
 
-> A modern, AI-assisted open-source CMS for content and news publishing — built on Next.js 15 and PostgreSQL.
+> A modern, AI-assisted open-source CMS for content and news publishing. Next.js 15 + PostgreSQL.
 
 WordPress-style install: enter DB credentials, finish the `/install` wizard. The rest happens in the admin panel — no code edits, no config files to hunt down.
 
 **Status:** Active development. Production-tested but APIs may shift before 1.0.
-
-**Live example:** [techawave.com](https://techawave.com) — a tech news site running on Envoraicms.
+**Live example:** [techawave.com](https://techawave.com)
 
 ---
 
-## Why Envoraicms
+## What it does
 
-- **Fully automated, end-to-end.** Set up the cron jobs once and the system finds trending topics, drafts articles, writes the bodies, generates cover images, publishes them, pings Google Search Console, and emits structured data — all without a human in the loop. Editorial oversight is optional, not required.
-- **AI-native, not AI-bolted-on.** A configurable ingest pipeline turns trending queries into article drafts and expands them into publish-ready HTML. Pick Gemini, OpenAI, or Anthropic per role (meta vs. content).
-- **WordPress-style ops.** One installer, an admin panel for everything, no `wp-config.php` analogue. The database is the source of truth.
-- **SEO out of the box.** Per-page metadata, OpenGraph + Twitter cards, `NewsArticle` / `BreadcrumbList` / `WebSite` / `Organization` JSON-LD, ImageObject dimensions, `citation` from upstream sources, speakable selectors — all without plugins.
-- **Built for the AI search era.** Speakable specs, citation fields, and structured-data signals tuned for both classical SEO and generative-engine surfaces.
-- **One sitemap.** `/sitemap.xml` covers pages + categories + articles + Google News markup for the last 48 hours.
-- **Modern stack.** Next.js 15 App Router, React 19, server components, TypeScript end-to-end, no ORM bloat.
+Once a cron job is configured, Envoraicms finds trending topics (via SerpAPI Google Trends or NewsNow), turns them into article ideas with a meta-AI, writes 700–1000 word HTML bodies with a content-AI (Gemini / OpenAI / Anthropic — pick per role), optionally generates cover images via fal.ai, publishes them with SEO JSON-LD, and pings Google Search Console — fully automated, no human in the loop.
 
-## How the automation works
-
-```
-            ┌───────────────────────────────────────────────────┐
-            │  In-process scheduler (every 60s, no external cron) │
-            └─────────────────────────┬─────────────────────────┘
-                                      │
-        ┌─────────────────────────────┼─────────────────────────────┐
-        ▼                             ▼                             ▼
-  ┌───────────┐               ┌───────────────┐             ┌──────────────┐
-  │  Trends   │               │  News fetch   │             │   Drafts     │
-  │ (SerpAPI) │               │  (NewsNow)    │             │  queue tick  │
-  └─────┬─────┘               └───────┬───────┘             └──────┬───────┘
-        │                             │                            │
-        ▼                             ▼                            ▼
-  ┌────────────────────────────────────────────────────────────────────┐
-  │  Meta AI (Gemini / OpenAI / Anthropic) — title, summary, keywords,  │
-  │  image prompt; one draft row per topic                              │
-  └────────────────────────────┬───────────────────────────────────────┘
-                               ▼
-  ┌────────────────────────────────────────────────────────────────────┐
-  │  Content AI (Gemini / OpenAI / Anthropic) — 700–1000 word HTML body │
-  └────────────────────────────┬───────────────────────────────────────┘
-                               ▼
-  ┌────────────────────────────────────────────────────────────────────┐
-  │  Image AI (fal.ai) — cover image generated from the meta prompt;    │
-  │  saved through sharp into /public/Upload/content/                   │
-  └────────────────────────────┬───────────────────────────────────────┘
-                               ▼
-  ┌────────────────────────────────────────────────────────────────────┐
-  │  Publish — Content row + author + category, SEO JSON-LD,            │
-  │  Indexing API call to Google Search Console                         │
-  └────────────────────────────────────────────────────────────────────┘
-```
-
-Every step is observable in the admin (`/admin/drafts`, `/admin/cronjobs`, `/admin/indexing`, `/admin/logs`) and overridable per cron job: trend window, ideation batch size, publish staggering, per-category quotas, even the prompt templates.
-
-## External APIs / integrations
-
-All credentials live in the **API Keys** screen in the admin (or for Google services, in **Google Kit** / **Indexing**). The system runs in degraded but still-useful modes when any of these are missing — for example, without an image provider the pipeline reuses upstream images; without SerpAPI it falls back to NewsNow trending topics.
-
-### AI providers (pick one per role)
-
-| Provider | Role | Used for | Notes |
-|---|---|---|---|
-| **[Google Gemini](https://gemini.google.com/)** | Meta AI / Content AI | Article titles, summaries, keywords, image prompts, full HTML body | Default choice; cheapest |
-| **[OpenAI](https://platform.openai.com/)** | Meta AI / Content AI | Same as above | GPT-4/4o family |
-| **[Anthropic Claude](https://www.anthropic.com/api)** | Meta AI / Content AI | Same as above | Claude 3.5 / 3.7 / 4.x family |
-| **[fal.ai](https://fal.ai/)** | Image AI | Cover image generation from prompts | Optional — pipeline runs without it |
-
-### Trend / news sources
-
-| Provider | Used for | Notes |
-|---|---|---|
-| **[SerpAPI](https://serpapi.com/)** | Google Trends queries — the seed for article ideation | 100 free searches/month; primary trend source |
-| **[NewsNow (RapidAPI)](https://rapidapi.com/rphrp1985/api/newsnow)** | News article ingest pipeline (separate from the AI pipeline) | Pulls existing news stories for the rewrite path |
-| **[NewsAPI.ai](https://newsapi.ai/)** | Alternative news source for the news ingest pipeline | Drop-in alternative to NewsNow |
-
-### Google services (admin-managed in `/admin/googlekit` and `/admin/indexing`)
-
-| Service | Used for | Required? |
-|---|---|---|
-| **[Google Search Console Indexing API](https://developers.google.com/search/apis/indexing-api)** | Push new / updated URLs to Google immediately on publish | Optional but recommended (200 URLs/day free) |
-| **[Google Analytics 4](https://analytics.google.com/)** | Visitor analytics via `gtag` | Optional |
-| **[Google Tag Manager](https://tagmanager.google.com/)** | Tag management container | Optional |
-| **[Google Search Console](https://search.google.com/search-console)** | Site verification via meta tag | Optional |
-| **[Google AdSense](https://www.google.com/adsense/)** | Display ads (manual slots or Auto Ads) | Optional |
-
-### Self-hosted / no third party
-
-- **PostgreSQL** — your own
-- **Sharp** — runs locally for image processing
-- **Sitemap, RSS, robots.txt, llms.txt** — generated by the app, no external service
-- **Session cookies + auth** — handled in-process, no Auth0 / Clerk / etc.
-
-You can run a useful site with just a Postgres DB + one AI provider key (Gemini's free tier is enough to test). Everything else is incremental.
-
-## Features
-
-### Automation
-- Fully automated ingest → ideate → expand → image → publish pipeline; runs hands-free once cron jobs are configured
-- Two parallel pipelines: AI-generated articles (SerpAPI + multi-provider AI) and news rewrites (NewsNow + AI)
-- Router mode: distribute trend queries across all active categories with per-category quotas
-- Single-category mode: pin a topic + target category for focused publishing
-- Configurable publish staggering, batch sizes, trend windows, language / location, prompt templates
-- Auto-refill: when the draft queue empties, ideation kicks off on its own
-- Optional auto-submit to Google Search Console Indexing API on every publish
-
-### Editorial
-- Article CRUD with rich-text editor and AI-assisted meta fields (title, summary, keywords, image prompt)
-- Draft queue managed by configurable cron jobs
-- Authors with bios, avatars, and per-author archive pages
-- Categories with header / footer / dropdown / sidebar menu flags
-- Ad slots (manual placements + Google AdSense Auto Ads)
-- Custom links and static pages
-- Prompt templates for the AI pipeline, editable in the admin
-
-### Themes & branding
-- Three first-party themes: Editorial Grid, Cover Mosaic, Broadsheet — switch in one click
-- Primary / secondary brand colors editable from the admin; drive every Tailwind `brand` / `navy` utility plus article-body CSS
-- Light / dark / system color modes with a per-visitor preference cookie
-
-### SEO & syndication
-- Single Site Language setting drives `<html lang>`, JSON-LD `inLanguage`, OpenGraph `og:locale`, and the news sitemap language tag
-- Unified `/sitemap.xml` with `<image:image>` per article and `<news:news>` for last-48h items
-- `robots.txt` route, `llms.txt` support, RSS per category
-- Google Analytics, Tag Manager, Search Console verification, AdSense — all admin-managed
-- Google Indexing API integration: automatic URL push on publish / update, with a logs view and quota counters
-
-### Operations
-- Health endpoint at `/api/health`
-- In-process scheduler runs every 60s (`instrumentation.ts` → `lib/ingest/scheduler.ts`); disable with `SCHEDULER_DISABLED=1`
-- Idempotent single-file schema (`deploy/schema.sql`); safe to re-run on every deploy
-- Audit log of admin actions
-- **In-place updater** at `/admin/system/update` — pulls the latest GitHub release, takes a DB + env backup, builds, migrates, and graceful-reloads PM2. Enable with `UPDATER_ENABLED=true`. Requires the repo to be a `git clone` (not a tarball upload).
-
-### Security
-- AES-GCM encrypted session cookies, no third-party auth dependency
-- **Admin login brute-force guard:** 5 failed attempts from the same IP within 15 minutes triggers a temporary lockout. IP detection prefers `X-Real-IP` (proxy-set, unspoofable) over `X-Forwarded-For` first hop, so a forged XFF header can't bypass the lock.
-- Admin dashboard "today / week / month / year" stats compute calendar boundaries in **the admin's browser timezone** (`Intl.DateTimeFormat().resolvedOptions().timeZone`), not the server's process TZ — so the counters stay correct after midnight in non-UTC zones.
-
-## Tech stack
-
-- **Next.js 15** App Router, React 19, server components
-- **PostgreSQL** 14+ via [`postgres.js`](https://github.com/porsager/postgres) (no ORM)
-- **Tailwind CSS** with CSS-variable-backed brand colors
-- **TypeScript** end-to-end
-- **sharp** for image processing, **isomorphic-dompurify** for article HTML
+Every step is observable in `/admin/drafts`, `/admin/cronjobs`, `/admin/indexing`, `/admin/logs` and overridable per cron job: trend window, ideation batch size, publish staggering, per-category quotas, prompt templates.
 
 ## Requirements
 
 - Node.js 20+
 - PostgreSQL 14+
-- 512 MB RAM minimum (sharp + Next runtime)
+- A server you control (VPS, bare metal, hosting panel like Hestia / Vesta / cPanel — anything that supports `git clone` + PM2)
+- 512 MB RAM minimum
 
-## Quick start
+---
+
+## Install
+
+### 1. Clone the repo
+
+`main` always tracks the latest released tag, so a fresh clone gives you the current stable. Don't download a zip — the in-app updater needs a `.git/` directory to fetch new releases.
+
+**Hosting panel with a pre-made document root** (cPanel / Hestia / Plesk):
 
 ```bash
-# 1. Clone (do not download a zip — the in-app updater needs .git/)
-git clone https://github.com/enveryurtsever/envoraicms.git
-cd envoraicms
-
-# 2. Env
-cp .env.example .env.local
-# edit .env.local — fill in DB_HOST / DB_NAME / DB_USER / DB_PASSWORD
-# (and set UPDATER_ENABLED=true if you want one-click updates from the admin)
-
-# 3. Create the DB
-createdb envoraicms
-
-# 4. Install
-npm ci
-
-# 5. Build + start
-npm run build
-npm run start
-
-# 6. Open the installer — it creates every table for you
-# → http://localhost:3002/install
+cd /var/www/example.com/public_html   # whatever your panel gave you
+git clone https://github.com/enveryurtsever/envoraicms.git .
 ```
 
-The wizard creates the admin user, writes the initial Settings row, and drops you into `/admin`.
+The trailing `.` clones the repo **into** the current directory instead of a nested `envoraicms/` subfolder. The folder must be empty first; move any placeholder files out of the way.
 
-Future releases are applied from `/admin/system/update` — the updater backs up the DB, fetches the new tag, rebuilds, migrates, and gracefully reloads PM2. No SSH needed unless a release notes a config-file change.
+**Bare VPS where you pick the path:**
 
-Full step-by-step (PM2, reverse proxy, updater quirks, troubleshooting) lives in [INSTALL.md](INSTALL.md).
+```bash
+sudo mkdir -p /var/www/envoraicms
+sudo chown $USER:$USER /var/www/envoraicms
+git clone https://github.com/enveryurtsever/envoraicms.git /var/www/envoraicms
+cd /var/www/envoraicms
+```
 
-## Configuration
+> Don't run `git clone <url>` with no destination — that creates a nested `envoraicms/` subfolder inside your current directory.
 
-Almost everything is in the database, edited from `/admin/settings`. The only env vars you need:
+### 2. Configure environment
+
+```bash
+cp .env.example .env.local
+nano .env.local
+```
+
+Set these values:
+
+```env
+DB_HOST=localhost
+DB_NAME=envoraicms
+DB_USER=envoraicms
+DB_PASSWORD='your-strong-password'      # wrap in single quotes; safest for &, *, :, $, #
+SITE_URL=https://example.com            # your domain — also drives the PM2 app name
+PORT=3002                               # any free port; use different values per install
+NODE_ENV=production
+UPDATER_ENABLED=true
+```
+
+> `DB_PASSWORD` must be in single quotes if it contains shell-special characters. dotenv reads everything after the first `=`, so quotes prevent later issues.
+
+### 3. Create the Postgres role + database
+
+`CREATE DATABASE` alone isn't enough — `npm run migrate` will fail with "role does not exist" if you skip the user:
+
+```bash
+sudo -u postgres psql <<'EOF'
+CREATE USER envoraicms WITH PASSWORD 'your-strong-password';
+CREATE DATABASE envoraicms OWNER envoraicms;
+GRANT ALL PRIVILEGES ON DATABASE envoraicms TO envoraicms;
+EOF
+```
+
+`<<'EOF'` (single-quoted heredoc) prevents bash from interpreting `$`, `&`, `*` in the password before passing it to `psql`. These credentials must match what you wrote in `.env.local`.
+
+Quick sanity check before continuing:
+
+```bash
+PGPASSWORD='your-strong-password' psql -h localhost -U envoraicms -d envoraicms -c '\conninfo'
+```
+
+`You are connected to database "envoraicms"…` means you're good.
+
+### 4. Install dependencies, migrate, build
+
+```bash
+npm ci
+npm run migrate
+npm run build
+```
+
+`npm run migrate` applies [`deploy/schema.sql`](deploy/schema.sql) and is idempotent — safe to re-run any time. Run it **before** `npm run build`; the build prerenders routes that hit the DB.
+
+### 5. Start with PM2
+
+```bash
+npm i -g pm2
+pm2 start deploy/ecosystem.config.js
+pm2 save
+pm2 startup    # follow the printed instructions to auto-start on reboot
+```
+
+The PM2 app name comes from `SITE_URL` (hostname, `www.` stripped), so multi-site hosts get distinct entries in `pm2 list` — e.g. `example.com`, `techawave.com`. Override with `PM2_APP_NAME` if you prefer a fixed name.
+
+### 6. Reverse proxy
+
+On a hosting panel, set the domain → backend port routing through the panel UI (Hestia: Web → Edit → Proxy Template = `nodeport`, Backend Port = whatever your `PORT` is).
+
+Bare nginx vhost:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name example.com;
+    ssl_certificate     /etc/ssl/example.com.pem;
+    ssl_certificate_key /etc/ssl/example.com.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /_next/static/ {
+        alias /var/www/envoraicms/.next/static/;
+        expires max;
+    }
+    location /Upload/ {
+        alias /var/www/envoraicms/public/Upload/;
+        expires max;
+    }
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+> Always forward `X-Real-IP` and `X-Forwarded-For`. The admin login's brute-force guard derives the client IP from these; without them every request looks like `127.0.0.1` and a single bad actor can lock out everyone.
+
+### 7. Run the /install wizard
+
+Open `https://example.com/install` (or `http://server:PORT/install`). The wizard:
+
+1. Verifies the DB connection.
+2. Generates a session signing secret.
+3. Writes the initial `Settings` row (site name, URL, language, target country).
+4. Seeds the default AI prompt templates.
+5. Creates your admin user.
+6. Adds a placeholder `General` category so the homepage isn't empty.
+
+It drops you straight into `/admin` when done.
+
+### 8. First steps in /admin
+
+1. **Settings → General** — confirm Site language and Target country. These drive every AI prompt + every news / trend lookup.
+2. **API Keys** — add at least one text-AI provider (Gemini is cheapest) and a trend or news source (SerpAPI for trends, NewsNow for ready-made news).
+3. **Categories** — add the topics your site covers.
+4. **Cron Jobs** — create your first cron. Article + Router mode is the easiest start: it auto-routes trending queries into your active categories.
+
+Within 15 minutes of the first cron tick, drafts appear and start expanding into articles.
+
+---
+
+## Updates
+
+After install, future releases apply in one click from `/admin/system/update`:
+
+1. The updater takes a DB + env backup under `backups/`.
+2. Pulls the latest release tag, runs `npm ci`, `npm run migrate`, `npm run build`, then `pm2 reload <your-app>`.
+3. If any step fails it **auto-rolls back** to the previous version so the site keeps serving.
+
+For headless / scripted environments, the same steps by hand (replace `<app>` with your name from `pm2 list`):
+
+```bash
+cd /var/www/envoraicms
+git fetch --tags
+git reset --hard <latest-tag>
+npm ci --include=dev
+npm run migrate
+npm run build
+pm2 reload <app>
+```
+
+> Migrate **before** build. The build prerenders DB-bound routes; a release that adds a new column will explode at build time if the schema isn't up-to-date.
+
+---
+
+## Troubleshooting
+
+**`fatal: detected dubious ownership in repository`** — PM2 runs as root but `.git/` is owned by a regular user. One-time fix:
+
+```bash
+git config --global --add safe.directory /var/www/envoraicms
+```
+
+The in-app updater bypasses this with an inline flag from v1.3.2 on; the line above only matters for git commands you type manually.
+
+**`password authentication failed for user "..."`** — Postgres rejected your credentials. Either the role doesn't exist (step 3 skipped) or the password in `.env.local` doesn't match what's stored. Test:
+
+```bash
+PGPASSWORD='your-password' psql -h localhost -U envoraicms -d envoraicms -c '\conninfo'
+```
+
+If that fails too, reset: `sudo -u postgres psql -c "ALTER USER envoraicms WITH PASSWORD 'new-pw';"` and put the same value in `.env.local`.
+
+**Site shows another install's content** — your reverse proxy is routing the domain to the wrong backend port. Confirm with `ss -lntp | grep :YOUR_PORT`, then check the nginx `proxy_pass` for this domain points there. On panels, the setting is the Backend Port in the domain's proxy template.
+
+**`column "X" does not exist` during build** — you ran `npm run build` before `npm run migrate`. Always migrate first.
+
+**`sharp` won't install (Linux ARM / Alpine)** — `npm rebuild sharp`.
+
+**Cron not running** — check server logs for `[scheduler] in-process tick every 60s`. If missing, either `SCHEDULER_DISABLED=1` is set or `instrumentation.ts` didn't build.
+
+**Admin login locks out everyone after one bot scan** — the reverse proxy isn't forwarding the real client IP. Add `X-Real-IP` / `X-Forwarded-For` headers in the proxy config.
+
+---
+
+## External services
+
+You can run a useful site with **just Postgres + one AI provider key** (Gemini's free tier is enough to test). Everything else is incremental. All credentials live in `/admin/api-keys` and `/admin/googlekit` — never in env.
+
+**AI providers** (pick one per role)
+
+| Provider | Used for |
+|---|---|
+| [Google Gemini](https://gemini.google.com/) | Meta + content AI (default; cheapest) |
+| [OpenAI](https://platform.openai.com/) | Meta + content AI |
+| [Anthropic Claude](https://www.anthropic.com/api) | Meta + content AI |
+| [fal.ai](https://fal.ai/) | Cover image generation (optional) |
+
+**Trend / news sources**
+
+| Provider | Used for |
+|---|---|
+| [SerpAPI](https://serpapi.com/) | Google Trends — seed for article ideation |
+| [NewsNow](https://rapidapi.com/rphrp1985/api/newsnow) | News article ingest (separate path) |
+| [NewsAPI.ai](https://newsapi.ai/) | Drop-in alternative to NewsNow |
+
+**Google services** (admin-managed)
+
+| Service | Used for |
+|---|---|
+| [Search Console Indexing API](https://developers.google.com/search/apis/indexing-api) | Auto-submit new URLs on publish |
+| [Analytics 4](https://analytics.google.com/) | Visitor analytics |
+| [Tag Manager](https://tagmanager.google.com/) | Tag container |
+| [Search Console](https://search.google.com/search-console) | Site verification |
+| [AdSense](https://www.google.com/adsense/) | Ads (manual slots + Auto Ads) |
+
+---
+
+## Features
+
+- Two parallel pipelines: AI-generated articles (SerpAPI → AI) and news rewrites (NewsNow → AI)
+- Router mode distributes trends across active categories with per-category quotas
+- Configurable publish staggering, batch sizes, trend windows, prompt templates
+- Auto-refill: drained queue triggers ideation on its own
+- Three themes (Editorial Grid / Cover Mosaic / Broadsheet); switch in one click
+- Per-site brand colors editable from `/admin/themes`; light / dark / system color modes
+- Authors with bios, avatars, per-author archives
+- Site Language drives `<html lang>`, JSON-LD `inLanguage`, OpenGraph, news sitemap, AND the language all AI content is written in
+- Per-page metadata + OpenGraph + Twitter cards + `NewsArticle` / `BreadcrumbList` / `WebSite` / `Organization` JSON-LD
+- Unified `/sitemap.xml` with image and Google News markup for last-48h items
+- RSS per category, `robots.txt`, `llms.txt`
+- Audit log of admin actions
+- AES-GCM encrypted sessions + brute-force guard (5 failed logins / 15 min IP lockout)
+- In-process scheduler every 60s — no external cron required
+- Auto-rollback in the in-app updater if a release fails to deploy
+
+---
+
+## Configuration (env vars)
+
+Almost everything is in the database, edited from `/admin/settings`. The only env vars:
 
 | Variable               | Required | Purpose                                       |
 |------------------------|----------|-----------------------------------------------|
@@ -200,12 +299,15 @@ Almost everything is in the database, edited from `/admin/settings`. The only en
 | `DB_PORT`              | no       | Default `5432`                                |
 | `DB_SSL`               | no       | `require` for managed Postgres                |
 | `PORT`                 | no       | Next listening port. Default `3000`           |
-| `SITE_URL`             | no       | Used only as a fallback before install        |
+| `SITE_URL`             | recommended | Drives the PM2 app name; also used pre-install |
+| `PM2_APP_NAME`         | no       | Override PM2 name (defaults to SITE_URL hostname) |
 | `SCHEDULER_DISABLED`   | no       | Set to `1` to disable in-process cron         |
 | `UPDATER_ENABLED`      | no       | `true` enables `/admin/system/update`         |
-| `UPDATER_GITHUB_REPO`  | no       | `owner/repo` if you forked; default is upstream |
+| `UPDATER_GITHUB_REPO`  | no       | `owner/repo` if you forked                    |
 
-API keys for AI providers (Gemini / OpenAI / Anthropic / SerpAPI) live in the admin panel under **API Keys** — not in env.
+API keys for AI providers live in `/admin/api-keys`, not env.
+
+---
 
 ## Project layout
 
@@ -213,132 +315,70 @@ API keys for AI providers (Gemini / OpenAI / Anthropic / SerpAPI) live in the ad
 app/
 ├── [category]/[slug]/   article detail
 ├── [category]/          category index + RSS
-├── admin/               admin panel (settings, contents, authors, themes, ...)
-├── api/                 minimal REST endpoints (view counter, health, install)
+├── admin/               admin panel
+├── api/                 REST endpoints (view counter, health, install)
 ├── install/             /install wizard
-├── sitemap.xml/         unified sitemap (pages + categories + articles + news)
-├── robots.ts            robots.txt route
-└── layout.tsx           root layout + brand-color injection + theme switch
+└── sitemap.xml/         unified sitemap
 
-components/              shared UI (Header, Footer, ArticleCard, AdSlot, ...)
 lib/
-├── queries/             DB read paths (cached with React cache + unstable_cache)
-├── ingest/              AI ingest pipeline (drafts → expand → publish)
+├── queries/             DB read paths (cached)
+├── ingest/              AI ingest pipeline
 ├── indexing/            Google Indexing API client
 ├── auth/                session / role guards
-├── seo.ts               metadata + JSON-LD builders
-├── site-language.ts     BCP47 ↔ og:locale ↔ news:language helper
-├── brand-colors.ts      hex → CSS variable helper
-└── types.ts             Settings / Content / Category / ... TS types
+├── system/              in-app updater (update-job, backup, version)
+└── site-language.ts     BCP47 ↔ og:locale ↔ news:language helper
 
-themes/
-├── classic/             Editorial Grid homepage
-├── magazine/            Cover Mosaic homepage
-├── minimal/             Broadsheet homepage
-└── shared/              shared blocks used by every theme
-
+themes/                  classic, magazine, minimal
 deploy/
 ├── schema.sql           single source-of-truth DB schema (idempotent)
-├── nginx.conf           example reverse-proxy config
-└── ecosystem.config.js  example PM2 config
-
-scripts/
-├── migrate.ts           applies deploy/schema.sql (same as the wizard does on boot)
-├── seed-admin.ts        creates an admin user from CLI
-└── ingest-runner.ts     manually trigger a cron pass
-```
-
-## Admin panel
-
-Every feature is reachable from the admin sidebar at `/admin`:
-
-- **Dashboard** — site-wide stats, recent activity
-- **Contents** — articles CRUD, AI-assisted meta fields, draft queue
-- **Drafts** — pending AI-generated drafts waiting on expansion
-- **Authors / Categories / Links / Ads / Prompts**
-- **Cron jobs** — schedule news + article pipelines per category
-- **API keys** — provider keys for Gemini / OpenAI / Anthropic / SerpAPI
-- **Themes** — switch theme + edit primary/secondary brand colors
-- **Settings** — site name, language, SEO, social links, AI provider routing, llms.txt
-- **Google Kit** — Analytics, Tag Manager, Search Console verification, AdSense
-- **Search Console / Indexing** — service account + automatic URL submission + manual submit + logs
-- **Logs** — audit trail of admin actions
-
-## Useful scripts
-
-```bash
-npm run dev               # next dev (with HMR)
-npm run build             # production build
-npm run start             # production server
-npm run typecheck         # tsc --noEmit
-npm run lint              # next lint
-npm run migrate           # apply deploy/schema.sql (for headless / scripted deploys)
-npm run seed:admin        # interactive admin user creation
-npm run seed:authors      # seed sample authors
-npm run ingest:runner     # one-shot cron tick (article + news pipelines)
+├── nginx.conf           reference reverse-proxy config
+└── ecosystem.config.js  PM2 config (reads .env.local for app name + port)
+scripts/                 migrate.ts, seed-admin.ts, ingest-runner.ts
 ```
 
 ## Database schema
 
-A single file is the source of truth: [`deploy/schema.sql`](deploy/schema.sql). It declares every table, index, extension, and seed row (themes, ad zones).
-
-The file is fully idempotent — every `CREATE` is `IF NOT EXISTS`, every seed is `ON CONFLICT DO NOTHING`. Running it twice does nothing harmful.
+A single file is the source of truth: [`deploy/schema.sql`](deploy/schema.sql). Every `CREATE` is `IF NOT EXISTS`, every seed is `ON CONFLICT DO NOTHING`. Running it twice does nothing harmful.
 
 Two ways to apply it:
 
-- **Via the `/install` wizard** — the first thing the wizard does is run this file. No manual step.
-- **Via the CLI** — `npm run migrate` runs the same file. Useful for headless / Docker / CI installs.
+- **/install wizard** runs schema.sql as its first step.
+- **CLI** — `npm run migrate`. The in-app updater calls this between fetch and build.
 
-When the schema evolves we edit this single file directly; no migration archive to maintain. To upgrade a live database simply re-run `npm run migrate` after pulling new code.
+When the schema evolves it's edited in place; no migration archive to maintain.
 
-## Roadmap
+## Useful scripts
 
-- Plugin / extension API for third-party modules
-- Multi-site support
-- More themes
-- Full localization of admin strings (currently English-only in the admin UI)
-- Optional Docker image
-- CLI tool for content import / export
+```bash
+npm run dev               # next dev with HMR
+npm run build             # production build
+npm run start             # production server
+npm run typecheck         # tsc --noEmit
+npm run migrate           # apply deploy/schema.sql
+npm run seed:admin        # interactive admin user creation
+npm run ingest:runner     # one-shot cron tick
+```
 
-Suggestions welcome — open an issue.
+---
 
 ## Contributing
 
-Contributions are welcome and encouraged. The short version:
-
-1. **Open an issue first** for anything beyond a one-line fix — it's easier to align on scope before code is written.
+1. **Open an issue first** for anything beyond a one-line fix.
 2. **Fork → branch → PR** against `main`.
-3. **Keep commits focused.** One concern per PR; the title + body should explain *why*, not just *what*.
-4. **Run before pushing:**
-   ```bash
-   npm run typecheck
-   npm run lint
-   npm run build
-   ```
-5. **No new dependencies** without discussion. The stack is intentionally small.
+3. **One concern per PR**; title + body explain *why*, not just *what*.
+4. **Before pushing:** `npm run typecheck && npm run lint && npm run build`.
+5. **No new dependencies** without discussion — the stack is intentionally small.
 
-Areas that always need help: docs, themes, translations, accessibility audits, performance work on the ingest pipeline.
+Help wanted: docs, themes, translations, accessibility audits, performance work on the ingest pipeline.
 
-## Reporting issues
+## Security
 
-- **Bugs / feature requests:** [GitHub Issues](https://github.com/enveryurtsever/envoraicms/issues). Include version, Node version, Postgres version, and a minimal repro.
-- **Security vulnerabilities:** please **don't** open a public issue. Email the maintainer or use GitHub's private vulnerability reporting. Coordinated disclosure preferred; credit given.
+Don't open public issues for security bugs. Email the maintainer or use GitHub's private vulnerability reporting. Coordinated disclosure preferred; credit given.
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE) for the full text.
-
-In the spirit of WordPress: free to use, study, modify, and redistribute — with the same freedoms preserved for downstream users.
+[GPL-3.0-or-later](LICENSE). Free to use, study, modify, redistribute — with the same freedoms preserved for downstream users.
 
 ## Acknowledgements
 
-Standing on the shoulders of:
-
-- [Next.js](https://nextjs.org/) — the framework
-- [React](https://react.dev/) — the UI runtime
-- [PostgreSQL](https://www.postgresql.org/) — the database
-- [Tailwind CSS](https://tailwindcss.com/) — the styling
-- [`postgres.js`](https://github.com/porsager/postgres) — the SQL client
-- [sharp](https://sharp.pixelplumbing.com/) — image processing
-- [DOMPurify](https://github.com/cure53/DOMPurify) — HTML sanitization
-- The WordPress project — for showing what self-hosted, open publishing software can be
+[Next.js](https://nextjs.org/), [React](https://react.dev/), [PostgreSQL](https://www.postgresql.org/), [Tailwind](https://tailwindcss.com/), [postgres.js](https://github.com/porsager/postgres), [sharp](https://sharp.pixelplumbing.com/), [DOMPurify](https://github.com/cure53/DOMPurify), and the WordPress project for showing what self-hosted, open publishing can be.
