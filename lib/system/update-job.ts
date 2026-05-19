@@ -4,6 +4,25 @@ import { randomUUID } from "node:crypto";
 import { takeBackup, runCommand, getHeadSha } from "./backup";
 import { clearVersionCache, getCurrentVersion } from "./version";
 
+/** PM2 app name to reload. Mirrors the resolution order in
+ *  deploy/ecosystem.config.js so the updater drives whatever name PM2 is
+ *  actually using. PM2_APP_NAME is forwarded into the child by the
+ *  ecosystem config, so this read is reliable when running under PM2. */
+function pm2AppName(): string {
+  const explicit = (process.env.PM2_APP_NAME ?? "").trim();
+  if (explicit) return explicit;
+  const url = (process.env.SITE_URL ?? "").trim();
+  if (url) {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      if (host && host !== "localhost") return host;
+    } catch {
+      /* malformed URL — fall through */
+    }
+  }
+  return "envoraicms";
+}
+
 export type StepKey =
   | "backup"
   | "fetch"
@@ -275,7 +294,7 @@ async function runUpdate(job: UpdateJob): Promise<void> {
 
   setTimeout(() => {
     try {
-      const child = spawn("pm2", ["reload", "envoraicms"], {
+      const child = spawn("pm2", ["reload", pm2AppName()], {
         detached: true,
         stdio: "ignore",
         env: process.env,
@@ -314,7 +333,7 @@ async function attemptRollback(job: UpdateJob): Promise<void> {
     logLine(
       job,
       `[rollback] no pre-update SHA recorded — cannot auto-rollback. ` +
-        `Manual: cd to install dir, find your previous version in git log, run "git reset --hard <sha>", "npm ci --include=dev", "npm run build", "pm2 reload envoraicms".`,
+        `Manual: cd to install dir, find your previous version in git log, run "git reset --hard <sha>", "npm ci --include=dev", "npm run build", "pm2 reload ${pm2AppName()}".`,
       "error",
     );
     finish("failed");
@@ -347,7 +366,7 @@ async function attemptRollback(job: UpdateJob): Promise<void> {
     logLine(job, `[rollback] FAILED: ${msg}`, "error");
     logLine(
       job,
-      `[rollback] Manual recovery: cd to install dir, run "git reset --hard ${job.fromSha}", "npm ci --include=dev", "npm run build", "pm2 reload envoraicms". DB backup is at ${job.backupDir ?? "(see backups/ folder)"}.`,
+      `[rollback] Manual recovery: cd to install dir, run "git reset --hard ${job.fromSha}", "npm ci --include=dev", "npm run build", "pm2 reload ${pm2AppName()}". DB backup is at ${job.backupDir ?? "(see backups/ folder)"}.`,
       "error",
     );
     finish("failed");
@@ -358,7 +377,7 @@ async function attemptRollback(job: UpdateJob): Promise<void> {
   clearVersionCache();
   setTimeout(() => {
     try {
-      const child = spawn("pm2", ["reload", "envoraicms"], {
+      const child = spawn("pm2", ["reload", pm2AppName()], {
         detached: true,
         stdio: "ignore",
         env: process.env,
