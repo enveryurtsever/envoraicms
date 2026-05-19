@@ -9,7 +9,7 @@ import { AdSlot } from "@/components/AdSlot";
 import { breadcrumbJsonLd, collectionPageJsonLd } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/utils";
 
-export const PAGE_SIZE = 16;
+export const PAGE_SIZE = 18;
 
 export async function CategoryView({ slug, page }: { slug: string; page: number }) {
   const offset = (page - 1) * PAGE_SIZE;
@@ -24,7 +24,16 @@ export async function CategoryView({ slug, page }: { slug: string; page: number 
   if (page > 1 && items.length === 0) notFound();
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Layout split:
+  //   - items[0]       — hero (full-width on the left of the top row)
+  //   - asideItems     — two cards stacked next to the hero when ads are off;
+  //                      when AdsEnabled, the ad slot takes this spot and the
+  //                      same items spill back into the grid below
+  //   - gridItems      — everything else, rendered as the 3-up grid
   const [lead, ...rest] = items;
+  const asideItems = settings.AdsEnabled ? [] : rest.slice(0, 2);
+  const gridItems = settings.AdsEnabled ? rest : rest.slice(2);
 
   const pageHref = (n: number) => (n === 1 ? `/${slug}` : `/${slug}/page/${n}`);
 
@@ -50,26 +59,19 @@ export async function CategoryView({ slug, page }: { slug: string; page: number 
       {lead ? (
         <section className="mb-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
           <ArticleCard item={lead} variant="hero" priority sizes="(min-width: 1024px) 860px, 100vw" />
-          <aside className="hidden lg:flex">
+          <aside className="hidden lg:block">
             {settings.AdsEnabled ? (
               <AdSlot name="sidebar-half" className="h-full w-full" />
             ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 bg-neutral-50 p-6 text-center dark:border-neutral-700 dark:bg-neutral-900">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-brand">
-                  Advertise
-                </span>
-                <h3 className="mt-2 text-lg font-bold text-neutral-900 dark:text-neutral-100">
-                  Your Ad Could Be Here
-                </h3>
-                <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-                  Reach thousands of readers every day. Promote your brand in this premium spot.
-                </p>
-                <Link
-                  href="/s/contact"
-                  className="mt-4 inline-flex items-center rounded bg-brand px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white hover:bg-brand/90"
-                >
-                  Contact Us
-                </Link>
+              <div className="flex h-full flex-col gap-4">
+                {asideItems.map((item) => (
+                  <ArticleCard
+                    key={item.ContentID}
+                    item={item}
+                    variant="grid"
+                    sizes="300px"
+                  />
+                ))}
               </div>
             )}
           </aside>
@@ -77,7 +79,7 @@ export async function CategoryView({ slug, page }: { slug: string; page: number 
       ) : null}
 
       <section aria-label={`${cat.CatName} articles`} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {rest.map((item) => (
+        {gridItems.map((item) => (
           <ArticleCard
             key={item.ContentID}
             item={item}

@@ -35,6 +35,16 @@ function num(fd: FormData, k: string): number {
   return Number.isFinite(v) ? v : 0;
 }
 
+/** An article is "live" — eligible for a Google Indexing URL_UPDATED ping —
+ *  only when an editor marked it active AND the scheduled publish moment
+ *  has arrived. Future-dated active rows are still IsActive=TRUE in the DB
+ *  (so the activator can flip them later via the public PublishDate filter),
+ *  but Google should hear about the URL on its actual publish date. The
+ *  scheduler's activator handles the ping at that moment. */
+function isLive(isActive: boolean, publishDate: Date): boolean {
+  return isActive && publishDate.getTime() <= Date.now();
+}
+
 function sanitize(html: string | null): string | null {
   if (!html) return null;
   return DOMPurify.sanitize(html, {
@@ -93,7 +103,7 @@ export async function createContentAction(fd: FormData) {
   const id = await createContent({ ...data, creatorId: sess?.uid ?? null });
   await logAudit("contents", `"${data.title}" content added`);
   revalidateTag("contents");
-  if (data.isActive) {
+  if (isLive(data.isActive, data.publishDate)) {
     const row = await getAdminContentById(id);
     if (row?.CatSeo) {
       const url = await buildContentUrl(row.CatSeo, data.seo);
@@ -112,7 +122,14 @@ export async function updateContentAction(id: number, fd: FormData) {
   const row = await getAdminContentById(id);
   if (row?.CatSeo) {
     const url = await buildContentUrl(row.CatSeo, data.seo);
-    submitIndexingFireAndForget(id, url, data.isActive ? "URL_UPDATED" : "URL_DELETED");
+    if (isLive(data.isActive, data.publishDate)) {
+      submitIndexingFireAndForget(id, url, "URL_UPDATED");
+    } else if (!data.isActive) {
+      // Editor flipped the piece off / soft-unpublished — tell Google to drop it.
+      submitIndexingFireAndForget(id, url, "URL_DELETED");
+    }
+    // Else: active but scheduled in the future → skip; the activator will
+    // ping URL_UPDATED when PublishDate <= NOW().
   }
   redirect(`/admin/contents/${id}/edit?saved=1`);
 }
@@ -146,7 +163,16 @@ export async function toggleContentAction(fd: FormData) {
   );
   if (row?.ContentSeo && row?.CatSeo) {
     const url = await buildContentUrl(row.CatSeo, row.ContentSeo);
-    submitIndexingFireAndForget(id, url, active ? "URL_UPDATED" : "URL_DELETED");
+    if (!active) {
+      submitIndexingFireAndForget(id, url, "URL_DELETED");
+    } else {
+      // Don't ping Google for a scheduled-future row; the activator will
+      // submit URL_UPDATED when the PublishDate moment arrives.
+      const publish = row.PublishDate ? new Date(row.PublishDate) : new Date();
+      if (publish.getTime() <= Date.now()) {
+        submitIndexingFireAndForget(id, url, "URL_UPDATED");
+      }
+    }
   }
   redirect("/admin/contents");
 }
