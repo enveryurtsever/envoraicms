@@ -9,8 +9,8 @@ export type StepKey =
   | "fetch"
   | "checkout"
   | "install"
-  | "build"
   | "migrate"
+  | "build"
   | "reload";
 
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped";
@@ -53,8 +53,8 @@ const STEP_LABELS: Record<StepKey, string> = {
   fetch: "Fetch tags from origin",
   checkout: "Reset working tree to release tag",
   install: "Install dependencies (npm ci)",
-  build: "Build (next build)",
   migrate: "Apply DB migrations",
+  build: "Build (next build)",
   reload: "Reload PM2 process",
 };
 
@@ -193,7 +193,24 @@ async function runUpdate(job: UpdateJob): Promise<void> {
     throw err;
   }
 
-  // 5. npm run build
+  // 5. migrate (idempotent) — MUST run before build. `next build` prerenders
+  // static routes that hit getSettings() and similar queries; if a release
+  // adds a new column, the build SELECT will explode with "column does not
+  // exist" unless the schema is already up-to-date. Schema.sql is purely
+  // additive (CREATE / ALTER ... IF NOT EXISTS), so running it ahead of the
+  // build is safe — old code on the previous .next/ tolerates new columns.
+  setStep(job, "migrate", "running");
+  try {
+    await runCommand("npm", ["run", "migrate"], {
+      onLine: lineCollector(job, "[migrate]"),
+    });
+    setStep(job, "migrate", "done");
+  } catch (err) {
+    setStep(job, "migrate", "failed");
+    throw err;
+  }
+
+  // 6. npm run build
   setStep(job, "build", "running");
   try {
     await runCommand("npm", ["run", "build"], {
@@ -203,18 +220,6 @@ async function runUpdate(job: UpdateJob): Promise<void> {
     setStep(job, "build", "done");
   } catch (err) {
     setStep(job, "build", "failed");
-    throw err;
-  }
-
-  // 6. migrate (idempotent)
-  setStep(job, "migrate", "running");
-  try {
-    await runCommand("npm", ["run", "migrate"], {
-      onLine: lineCollector(job, "[migrate]"),
-    });
-    setStep(job, "migrate", "done");
-  } catch (err) {
-    setStep(job, "migrate", "failed");
     throw err;
   }
 
