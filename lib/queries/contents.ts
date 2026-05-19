@@ -11,10 +11,17 @@ const LIST_COLS = sql`
   cat."CatSeo", cat."CatName"
 `;
 
+// PublishDate <= NOW() hides scheduled-future articles from the public site.
+// The activator flips IsActive=TRUE the moment a scheduled PublishDate
+// arrives, but until that tick the row may already be IsActive=TRUE with a
+// future PublishDate (e.g. an editor scheduled it via /admin), or the
+// activator may be queued behind a slow tick. Filtering here keeps the
+// public site honest regardless of which path produced the row.
 const LIST_JOIN = sql`
   FROM "Contents" c
   JOIN "Categories" cat ON cat."CatID" = c."FK_CatID"
   WHERE c."IsActive" = true AND c."IsDeleted" = false
+    AND c."PublishDate" <= NOW()
     AND cat."IsActive" = true AND cat."IsDeleted" = false
 `;
 
@@ -82,6 +89,7 @@ export const getPerCategoryLatest = cache(
         FROM "Contents" c
         WHERE c."FK_CatID" = cat."CatID"
           AND c."IsActive" = true AND c."IsDeleted" = false
+          AND c."PublishDate" <= NOW()
           AND c."ContentID" <> ALL(${excl}::int[])
         ORDER BY c."PublishDate" DESC
         LIMIT ${perCat}
@@ -148,6 +156,7 @@ export const countByAuthorId = cache(
           WHERE c."FK_AuthorID" = ${authorId}
             AND c."IsActive" = true
             AND c."IsDeleted" = false
+            AND c."PublishDate" <= NOW()
         `;
         return Number(rows[0]?.count ?? 0);
       },
@@ -189,6 +198,7 @@ export const countByCategoryId = cache(
           WHERE c."FK_CatID" = ${catId}
             AND c."IsActive" = true
             AND c."IsDeleted" = false
+            AND c."PublishDate" <= NOW()
         `;
         return Number(rows[0]?.count ?? 0);
       },
@@ -224,6 +234,7 @@ export const getContentBySlug = cache(
           WHERE c."ContentSeo" = ${slug}
             AND c."IsActive" = true
             AND c."IsDeleted" = false
+            AND c."PublishDate" <= NOW()
           LIMIT 1
         `;
         return rows[0] ?? null;
@@ -290,6 +301,7 @@ export const getTopTags = cache(
         SELECT "ContentKeywords"
         FROM "Contents"
         WHERE "IsActive" = true AND "IsDeleted" = false
+          AND "PublishDate" <= NOW()
           AND "Homepage" = true
           AND "ContentKeywords" IS NOT NULL
         ORDER BY "PublishDate" DESC
@@ -330,6 +342,7 @@ export const getSitemapContents = cache(
       FROM "Contents" c
       JOIN "Categories" cat ON cat."CatID" = c."FK_CatID"
       WHERE c."IsActive" = true AND c."IsDeleted" = false
+        AND c."PublishDate" <= NOW()
         AND cat."IsActive" = true AND cat."IsDeleted" = false
       ORDER BY COALESCE(c."ModifiedDate", c."PublishDate") DESC
       LIMIT ${limit} OFFSET ${offset}
@@ -343,6 +356,7 @@ export const countSitemapContents = cache(async (): Promise<number> => {
     FROM "Contents" c
     JOIN "Categories" cat ON cat."CatID" = c."FK_CatID"
     WHERE c."IsActive" = true AND c."IsDeleted" = false
+      AND c."PublishDate" <= NOW()
       AND cat."IsActive" = true AND cat."IsDeleted" = false
   `;
   return rows[0]?.c ?? 0;
@@ -356,6 +370,7 @@ export const getTrendingContentIds = cache(
       FROM "Contents" c
       JOIN "Categories" cat ON cat."CatID" = c."FK_CatID"
       WHERE c."IsActive" = true AND c."IsDeleted" = false
+        AND c."PublishDate" <= NOW()
         AND cat."IsActive" = true AND cat."IsDeleted" = false
       ORDER BY c."PublishDate" DESC
       LIMIT 500
