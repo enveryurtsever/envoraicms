@@ -22,8 +22,30 @@ from the admin panel.
 
 ### 1. Clone the repo
 
-Pick a directory to host the site (this is also where the updater will
-fetch into):
+`main` always points at the latest released tag — every release is cut from
+the tip of `main`, so a fresh `git clone` puts you on the latest version
+with no `git checkout vX.Y.Z` step needed. The in-app updater at
+`/admin/system/update` then advances you to future releases.
+
+Two common shapes for the clone, depending on how your hosting panel
+exposes the document root:
+
+**Hosting panel with a pre-made document root** (cPanel, Plesk, generic
+\"public_html\" layouts). Clone the repo's contents directly into that
+folder — the trailing `.` tells git \"into the current directory, not a
+nested subfolder\":
+
+```bash
+cd /var/www/techawave.com/public_html   # whatever your panel gave you
+git clone https://github.com/enveryurtsever/envoraicms.git .
+```
+
+The directory must be empty (or contain only `.` / `..`) for this to work.
+If your panel pre-populated it with placeholder files (`index.html`,
+`cgi-bin/`, …), move them out of the way first.
+
+**Bare VPS, you pick the path.** Pass the destination as the second
+argument; git creates it for you (no nested subfolder):
 
 ```bash
 sudo mkdir -p /var/www/envoraicms
@@ -32,12 +54,9 @@ git clone https://github.com/enveryurtsever/envoraicms.git /var/www/envoraicms
 cd /var/www/envoraicms
 ```
 
-If you want to pin to a release rather than tracking `main`:
-
-```bash
-git fetch --tags
-git checkout v1.1.3   # or whatever release is current
-```
+> Don't run `git clone <url>` with no destination — it creates a nested
+> `envoraicms/` subfolder inside your current directory. The two forms
+> above avoid that.
 
 ### 2. Configure DB
 
@@ -52,23 +71,43 @@ Inside `.env.local`:
 ```
 DB_HOST=localhost
 DB_NAME=envoraicms
-DB_USER=postgres
-DB_PASSWORD=...
+DB_USER=envoraicms
+DB_PASSWORD='your-strong-password'   # wrap in single quotes; safest for `&`, `*`, `:`, `$`
 # DB_PORT=5432            # optional
 # DB_SSL=require          # for remote DB
+
+# Public origin. Also drives the PM2 app name (hostname is extracted,
+# leading "www." stripped) so multi-site hosts get distinct entries in
+# `pm2 list` automatically. Set this BEFORE `pm2 start`.
+SITE_URL=https://example.com
 
 PORT=3002                 # Next.js listening port (pick anything free)
 
 # Enable the /admin/system/update flow (off by default)
 UPDATER_ENABLED=true
 # UPDATER_GITHUB_REPO=enveryurtsever/envoraicms   # only if you forked
+
+# Optional: pin the PM2 app name explicitly. If unset, it's derived from
+# SITE_URL (or falls back to "envoraicms").
+# PM2_APP_NAME=example.com
 ```
 
-Create the database in Postgres:
+Create the database AND the role in Postgres (`CREATE DATABASE` alone
+isn't enough — `npm run migrate` will fail with "role does not exist" or
+"password authentication failed" if you skip the user):
 
-```sql
-CREATE DATABASE envoraicms;
+```bash
+sudo -u postgres psql <<'EOF'
+CREATE USER envoraicms WITH PASSWORD 'your-strong-password';
+CREATE DATABASE envoraicms OWNER envoraicms;
+GRANT ALL PRIVILEGES ON DATABASE envoraicms TO envoraicms;
+EOF
 ```
+
+The `<<'EOF'` heredoc (with single-quoted EOF) prevents bash from
+interpreting `$`, `&`, `*` etc. inside the password before passing it to
+`psql`. Match `DB_USER` / `DB_PASSWORD` in `.env.local` to what you set
+here.
 
 ### 3. Install dependencies
 
@@ -98,6 +137,12 @@ pm2 start deploy/ecosystem.config.js
 pm2 save
 pm2 startup     # follow the printed instructions to enable on boot
 ```
+
+PM2 picks the app name from `SITE_URL` in `.env.local` (or `PM2_APP_NAME`
+if set), so `pm2 list` shows each install under its domain — e.g.
+`techawave.com` and `example.com` running side-by-side on the same box.
+The in-app updater reads the same name when calling `pm2 reload`, so you
+never need to edit `deploy/ecosystem.config.js` by hand.
 
 ### 5. Run the /install wizard
 
@@ -176,28 +221,32 @@ Once installed, future releases can be applied without SSH'ing in:
 1. `/admin/system/update` → **Check now** → **Update to vX.Y.Z**.
 2. The updater takes a DB + env backup under `backups/`, runs `git fetch
    --tags`, `git reset --hard <tag>`, `npm ci --include=dev`, `npm run
-   build`, `npm run migrate`, then a graceful `pm2 reload`.
+   migrate`, `npm run build`, then a graceful `pm2 reload <app>`. If any
+   step fails, the updater **auto-rolls back** to the pre-update commit
+   and pm2-reloads the old version, so the site keeps serving.
 3. If the release notes mention an nginx change (rare), run
    `sudo nginx -t && sudo systemctl reload nginx` on the box. Everything
    else is in-process.
 
 If the updater is disabled or fails for some reason, the same steps work
-by hand:
+by hand. `<app>` is whatever your install resolved to from `SITE_URL` /
+`PM2_APP_NAME` — check `pm2 list` if unsure:
 
 ```bash
-cd /var/www/envoraicms
+cd /var/www/envoraicms       # or your install path
 git fetch --tags
-git reset --hard vX.Y.Z
+git reset --hard vX.Y.Z      # or `git pull` to track latest main
 npm ci --include=dev
-npm run build
 npm run migrate
-pm2 reload envoraicms
+npm run build
+pm2 reload <app>
 ```
 
-> The PM2 app name in `deploy/ecosystem.config.js` is `envoraicms`. If you
-> renamed it locally, swap that into the `pm2 reload` command and update
-> `lib/system/update-job.ts` if you want the in-app updater to drive your
-> rename too.
+> Run `npm run migrate` BEFORE `npm run build`. The build prerenders
+> static routes that hit the DB (e.g. `/robots.txt` → `getSettings()`); if
+> a release adds a new column, building first will explode with "column
+> does not exist". The in-app updater already does this order; do the
+> same in manual recoveries.
 
 ### Behind a reverse proxy and running as root?
 
@@ -225,7 +274,8 @@ sudo chown -R root:root /var/www/envoraicms/.git
 - **Updater fails at `npm ci`**: pre-v1.1.2 the updater inherited
   `NODE_ENV=production` from PM2 and skipped devDependencies. Upgrade past
   v1.1.2 once by hand (`git reset --hard vLATEST && npm ci --include=dev
-  && npm run build && pm2 reload envoraicms`) and future updates work.
+  && npm run migrate && npm run build && pm2 reload <app>`) and future
+  updates work.
 - **Admin login locks out everyone after one bot scans the path**: your
   reverse proxy isn't forwarding the real client IP. Add the
   `X-Real-IP` / `X-Forwarded-For` headers from the example config above.
