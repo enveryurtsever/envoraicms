@@ -15,10 +15,10 @@ export function Nav({
           {categories.map((c) => {
             const active = activeSlug === c.CatSeo;
             return (
-              <li key={c.CatID}>
+              <li key={c.CatID} className="shrink-0">
                 <Link
                   href={`/${c.CatSeo}`}
-                  className={`inline-block border-b-[3px] px-4 py-3.5 transition-colors ${
+                  className={`inline-block whitespace-nowrap border-b-[3px] px-4 py-3.5 transition-colors ${
                     active
                       ? "border-brand text-brand"
                       : "border-transparent text-navy hover:text-brand dark:text-neutral-100 dark:hover:text-brand"
