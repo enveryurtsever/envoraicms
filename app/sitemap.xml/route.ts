@@ -9,7 +9,11 @@ import { newsLanguage } from "@/lib/site-language";
 // well above the site's foreseeable scale). The custom XML route exists so we
 // can emit the `image:` and `news:` namespaces, which the built-in
 // MetadataRoute.Sitemap helper does not support.
-export const revalidate = 3600;
+// Dynamic, not ISR: prerendering this at build time opens DB connections that
+// keep the `next build` process alive (idle sockets) and stall the in-app
+// updater. Rendered per-request; underlying queries are cached via
+// unstable_cache, so it stays cheap and reflects live content.
+export const dynamic = "force-dynamic";
 
 function xmlEscape(s: string): string {
   return s

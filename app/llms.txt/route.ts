@@ -4,7 +4,11 @@ import { getHeaderCategories } from "@/lib/queries/categories";
 import { getLatest } from "@/lib/queries/contents";
 import { absoluteUrl } from "@/lib/utils";
 
-export const revalidate = 1800;
+// Dynamic, not ISR: prerendering this at build time opens DB connections that
+// keep the `next build` process alive (idle sockets) and stall the in-app
+// updater. Rendered per-request instead; the underlying queries are cached via
+// unstable_cache, so it stays cheap.
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const settings = await getSettings();

@@ -2,7 +2,11 @@ import { getSettings } from "@/lib/queries/settings";
 import { getLatest } from "@/lib/queries/contents";
 import { absoluteUrl, toISO, truncate } from "@/lib/utils";
 
-export const revalidate = 300;
+// Dynamic, not ISR: prerendering this at build time opens DB connections that
+// keep the `next build` process alive (idle sockets) and stall the in-app
+// updater. Rendered per-request; underlying queries are cached via
+// unstable_cache, so it stays cheap and reflects live content.
+export const dynamic = "force-dynamic";
 
 function xmlEscape(s: string): string {
   return s
