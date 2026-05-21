@@ -10,6 +10,7 @@ import {
   type LinkInput,
 } from "@/lib/queries/admin-links";
 import { getSettings } from "@/lib/queries/settings";
+import { languageEnglishName } from "@/lib/site-language";
 import { getActiveTextAI } from "@/lib/ingest/providers/text";
 import { logAudit } from "@/lib/audit";
 
@@ -106,23 +107,31 @@ function corePagePrompt(args: {
   siteUrl: string;
   description: string;
   contactEmail: string | null;
+  language: string;
+  /** Human "Month Year" for the current date, e.g. "May 2026". */
+  nowLabel: string;
 }): { system: string; user: string } {
   const system =
     "You write static legal/contact pages for news websites. " +
-    "Reply with a JSON object {\"html\": string}. The html field must be a " +
-    "self-contained body (no <html>, <head>, or <body> tags). Use semantic " +
-    "<h2>/<h3>/<p>/<ul>/<li> tags. American English. Approximately 500–800 words.";
+    `Write everything — the page title, all headings, and body — natively in ${args.language}. ` +
+    "Reply with a JSON object {\"title\": string, \"html\": string}. " +
+    `The title is this page's name in ${args.language} (e.g. the ${args.language} equivalent of "Privacy Policy"). ` +
+    "The html field must be a self-contained body (no <html>, <head>, or <body> tags). Use semantic " +
+    "<h2>/<h3>/<p>/<ul>/<li> tags. Approximately 500–800 words.";
 
+  // The model has no reliable sense of "today" and will otherwise stamp a
+  // date from its training cutoff. Hand it the real current date explicitly.
   const ctx = `Site name: ${args.siteName}
 Site URL: ${args.siteUrl}
 Site description: ${args.description}
-Contact email: ${args.contactEmail ?? "not provided"}`;
+Contact email: ${args.contactEmail ?? "not provided"}
+Today's date: ${args.nowLabel}`;
 
   const ask =
     args.kind === "privacy"
-      ? "Write a generic Privacy Policy covering: data we collect (analytics cookies, contact-form submissions), how we use it, third-party processors (Google Analytics, AdSense), user rights (access, deletion), and contact instructions. Add a 'Last updated' line at the top with the current month and year."
+      ? `Write a generic Privacy Policy covering: data we collect (analytics cookies, contact-form submissions), how we use it, third-party processors (Google Analytics, AdSense), user rights (access, deletion), and contact instructions. Add a "last updated" line at the top dated ${args.nowLabel} (phrased in ${args.language}).`
       : args.kind === "terms"
-        ? "Write a generic Terms of Service covering: acceptance, intellectual property, user-submitted content, prohibited uses, disclaimers, limitation of liability, governing law (United States), and changes to terms. Add a 'Last updated' line at the top with the current month and year."
+        ? `Write a generic Terms of Service covering: acceptance, intellectual property, user-submitted content, prohibited uses, disclaimers, limitation of liability, governing law, and changes to terms. Add a "last updated" line at the top dated ${args.nowLabel} (phrased in ${args.language}).`
         : "Write a friendly Contact page that invites readers to reach out. Mention the contact email if provided, otherwise instruct readers to use a future contact form. Keep it short (3 short paragraphs).";
 
   return { system, user: `${ctx}\n\nTask: ${ask}` };
@@ -157,6 +166,10 @@ export async function generateCorePagesAction(): Promise<{
   `;
   const contactEmail = mailRow[0]?.MailSender ?? null;
 
+  const language = languageEnglishName(settings.SiteLanguage);
+  // Real current date, so the AI can't fall back to a training-cutoff year.
+  const nowLabel = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+
   let order = 100;
   for (const page of CORE_PAGES) {
     if (await linkSlugExists(page.slug)) {
@@ -170,15 +183,23 @@ export async function generateCorePagesAction(): Promise<{
         siteUrl: settings.SiteUrl,
         description: settings.Description,
         contactEmail,
+        language,
+        nowLabel,
       });
-      const out = await ai.generateJSON<{ html?: string }>({ system, user });
+      const out = await ai.generateJSON<{ html?: string; title?: string }>({ system, user });
       const html = sanitize(typeof out?.html === "string" ? out.html : null);
       if (!html) {
         errors.push({ slug: page.slug, message: "AI returned no usable HTML" });
         continue;
       }
+      // Use the localized title the model returned; fall back to the English
+      // default if it omitted one. Slug stays English for stable URLs.
+      const title =
+        typeof out?.title === "string" && out.title.trim().length > 0
+          ? out.title.trim()
+          : page.title;
       await createLink({
-        title: page.title,
+        title,
         url: null,
         icon: null,
         slug: page.slug,
