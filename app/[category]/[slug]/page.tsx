@@ -5,7 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import DOMPurify from "isomorphic-dompurify";
 import { getCategoryBySlug } from "@/lib/queries/categories";
-import { getContentBySlug, getPopular, getRelated, getTrendingContentIds } from "@/lib/queries/contents";
+import { getContentBySlug, getPopular, getRelated } from "@/lib/queries/contents";
 import { getSettings } from "@/lib/queries/settings";
 import { ArticleCard } from "@/components/ArticleCard";
 import { AdSlot } from "@/components/AdSlot";
@@ -15,13 +15,10 @@ import { SocialShare } from "@/components/SocialShare";
 import { breadcrumbJsonLd, contentMetadata, newsArticleJsonLd } from "@/lib/seo";
 import { absoluteUrl, contentThumb, formatCount, formatDate, formatDateLong, parseSource, toISO, toSearchSlug } from "@/lib/utils";
 
-export const revalidate = 600;
-export const dynamicParams = true;
-
-export async function generateStaticParams() {
-  const items = await getTrendingContentIds();
-  return items.map((i) => ({ category: i.CatSeo, slug: i.ContentSeo }));
-}
+// Dynamic: the root layout reads request headers/cookies, so a static
+// prerender here throws DYNAMIC_SERVER_USAGE (this was the article-detail 500).
+// DB reads remain cached via unstable_cache in lib/queries.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(
   { params }: { params: Promise<{ category: string; slug: string }> }

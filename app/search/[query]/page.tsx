@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { ArticleCard } from "@/components/ArticleCard";
 import { searchContents } from "@/lib/queries/contents";
 
-export const revalidate = 60;
+// Dynamic: the root layout reads request headers/cookies, so a static
+// prerender here throws DYNAMIC_SERVER_USAGE. DB reads remain cached via
+// unstable_cache in lib/queries.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Search",

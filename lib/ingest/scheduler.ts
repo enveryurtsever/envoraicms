@@ -45,12 +45,22 @@ async function tick(): Promise<void> {
   ticking = true;
   try {
     // Cluster-safe: the first worker to grab the lock runs the batch; others
-    // skip silently. The lock is released at the end of the tick.
-    const got = await sql<{ ok: boolean }[]>`
-      SELECT pg_try_advisory_lock(${SCHEDULER_LOCK_KEY}) AS ok
-    `;
-    if (!got[0]?.ok) return;
+    // skip silently. Session-level advisory locks belong to the exact
+    // connection that took them, so the lock and the unlock MUST run on the
+    // same physical connection. Going through the pool let the unlock land on
+    // a different connection — Postgres then logged "you don't own a lock of
+    // type ExclusiveLock" and the lock leaked. sql.reserve() pins one
+    // connection for the lock's lifetime; the jobs themselves keep using the
+    // pool via the shared `sql`.
+    const lock = await sql.reserve();
+    let locked = false;
     try {
+      const got = await lock<{ ok: boolean }[]>`
+        SELECT pg_try_advisory_lock(${SCHEDULER_LOCK_KEY}) AS ok
+      `;
+      if (!got[0]?.ok) return;
+      locked = true;
+
       const [{ runDueCronJobs }, { activateScheduledArticles, drainPendingArticleQueues }] =
         await Promise.all([
           import("@/lib/ingest/run-due-jobs"),
@@ -75,7 +85,10 @@ async function tick(): Promise<void> {
       // 3) Cron-due jobs (refill for article kind, full pipeline for news).
       await runDueCronJobs();
     } finally {
-      await sql`SELECT pg_advisory_unlock(${SCHEDULER_LOCK_KEY})`;
+      if (locked) {
+        await lock`SELECT pg_advisory_unlock(${SCHEDULER_LOCK_KEY})`;
+      }
+      lock.release();
     }
   } catch (e) {
     console.error("[scheduler] tick failed:", e);

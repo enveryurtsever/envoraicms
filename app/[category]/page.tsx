@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
-import { getCategoryBySlug, getAllCategorySlugs } from "@/lib/queries/categories";
+import { getCategoryBySlug } from "@/lib/queries/categories";
 import { getSettings } from "@/lib/queries/settings";
 import { categoryMetadata } from "@/lib/seo";
 import { CategoryView } from "./_view";
 
-export const revalidate = 60;
-export const dynamicParams = true;
-
-export async function generateStaticParams() {
-  const slugs = await getAllCategorySlugs();
-  return slugs.map((category) => ({ category }));
-}
+// Dynamic: the root layout reads request headers/cookies, so a static
+// prerender here throws DYNAMIC_SERVER_USAGE. DB reads remain cached via
+// unstable_cache in lib/queries.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(
   { params }: { params: Promise<{ category: string }> }

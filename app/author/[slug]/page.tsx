@@ -9,8 +9,10 @@ import { getSettings } from "@/lib/queries/settings";
 import { authorJsonLd, authorMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/utils";
 
-export const revalidate = 300;
-export const dynamicParams = true;
+// Dynamic: the root layout reads request headers/cookies, so a static
+// prerender here throws DYNAMIC_SERVER_USAGE. DB reads remain cached via
+// unstable_cache in lib/queries.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> },

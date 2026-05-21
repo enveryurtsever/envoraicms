@@ -15,6 +15,9 @@ tsconfig.tsbuildinfo
 # In-place update snapshots written by /admin/system/update
 /backups/
 
+# Private release runbook for the AI assistant — local only, not shipped
+/update.md
+
 # User-generated uploads — never commit. Shipped defaults
 # (Upload/default-cover.jpg, Upload/favicon/, admin-logo.png) stay tracked.
 /public/Upload/author/
