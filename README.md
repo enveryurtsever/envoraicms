@@ -5,7 +5,7 @@
 WordPress-style install: enter DB credentials, finish the `/install` wizard. The rest happens in the admin panel — no code edits, no config files to hunt down.
 
 **Status:** Active development. Production-tested but APIs may shift before 1.0.
-**Live example:** [techawave.com](https://techawave.com)
+**Live example:** [techawave.com](https://techawave.com)  / [vitenhelse.com](https://vitenhelse.com)
 
 ---
 
