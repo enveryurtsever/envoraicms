@@ -9,6 +9,7 @@ import type {
 } from "@/lib/ingest/types";
 import { fetchNewsNow, externalIdFor } from "./providers/news/newsnow";
 import { rewriteWithCategory } from "./rewrite-with-category";
+import { makeFalaiProvider } from "./providers/image/falai";
 import { downloadAndStoreImage } from "./download-image";
 import {
   saveDraft,
@@ -22,6 +23,20 @@ import { ensureUniqueSlug } from "./db";
 import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
 const PROVIDER = "newsnow";
+
+const cronImageProviderCache = new Map<number, "passthrough" | "falai">();
+
+async function getImageProviderForCron(cronId: number): Promise<"passthrough" | "falai"> {
+  if (cronImageProviderCache.has(cronId)) {
+    return cronImageProviderCache.get(cronId)!;
+  }
+  const rows = await sql<{ ImageAiProvider: string | null }[]>`
+    SELECT "ImageAiProvider" FROM "CronJobs" WHERE "CronID" = ${cronId} LIMIT 1
+  `;
+  const provider = rows[0]?.ImageAiProvider === "falai" ? "falai" : "passthrough";
+  cronImageProviderCache.set(cronId, provider);
+  return provider;
+}
 
 async function loadActiveCategories(): Promise<IngestCategory[]> {
   return sql<IngestCategory[]>`
@@ -115,11 +130,12 @@ export async function fetchAndStageNewsNow(args: {
 
 /**
  * STAGE 2 — process up to `limit` pending drafts: rewrite with Gemini, pick a
- * site category, download the top image, insert a Contents row, and mark the
- * draft done. Errors are recorded on the draft so they can be retried.
+ * site category, generate/download image per imageProvider, insert a Contents row,
+ * and mark the draft done. Errors are recorded on the draft so they can be retried.
  */
 export async function processPendingDrafts(args: {
   limit: number;
+  imageProvider?: "passthrough" | "falai";
   log: string[];
 }): Promise<PipelineOutcome> {
   const { limit, log } = args;
@@ -175,10 +191,51 @@ export async function processPendingDrafts(args: {
           ? categories.find((c) => c.CatSeo === rewritten.categorySlug)
           : null) ?? categories[0];
 
-      // Download image (best-effort). On failure we keep the original URL
-      // so the article still has a thumbnail path.
+      // Handle image generation based on selected Image Generator setting
+      let effectiveProvider = args.imageProvider;
+      if (!effectiveProvider && draft.FK_CronID) {
+        effectiveProvider = await getImageProviderForCron(draft.FK_CronID);
+      }
+      if (!effectiveProvider) {
+        effectiveProvider = "passthrough";
+      }
+
       let imagePath = draft.TopImage ?? "";
-      if (draft.TopImage) {
+      if (effectiveProvider === "falai") {
+        try {
+          const provider = await makeFalaiProvider();
+          const promptForImage =
+            rewritten.imagePrompt?.trim() ||
+            `${rewritten.title}. Editorial news photograph, photojournalistic style, high quality, no text, no logos.`;
+          imagePath = await provider.generate({
+            prompt: promptForImage,
+            slug: rewritten.slug,
+            fallbackThumbnail: draft.TopImage ?? null,
+          });
+          log.push(`[draft#${draft.DraftID}] [falai] generated image`);
+        } catch (err) {
+          log.push(
+            `[draft#${draft.DraftID}] fal.ai image generation failed: ${
+              err instanceof Error ? err.message : String(err)
+            } (falling back to original thumbnail)`,
+          );
+          if (draft.TopImage) {
+            try {
+              imagePath = await downloadAndStoreImage({
+                url: draft.TopImage,
+                bucket: "content",
+                slug: rewritten.slug,
+              });
+            } catch (dlErr) {
+              log.push(
+                `[draft#${draft.DraftID}] image download failed: ${
+                  dlErr instanceof Error ? dlErr.message : String(dlErr)
+                } (keeping original URL)`,
+              );
+            }
+          }
+        }
+      } else if (draft.TopImage) {
         try {
           imagePath = await downloadAndStoreImage({
             url: draft.TopImage,
@@ -230,6 +287,7 @@ export async function runNewsNowJob(args: {
   cronId: number | null;
   params: NewsNowFetchParams;
   articlesPerRun: number;
+  imageProvider?: "passthrough" | "falai";
   log?: string[];
 }): Promise<PipelineOutcome> {
   const { assertPreflightOk } = await import("@/lib/queries/preflight");
@@ -240,5 +298,10 @@ export async function runNewsNowJob(args: {
     params: { ...args.params, limit: Math.max(args.articlesPerRun, 5) },
     log,
   });
-  return processPendingDrafts({ limit: args.articlesPerRun, log });
+  return processPendingDrafts({
+    limit: args.articlesPerRun,
+    imageProvider: args.imageProvider,
+    log,
+  });
 }
+

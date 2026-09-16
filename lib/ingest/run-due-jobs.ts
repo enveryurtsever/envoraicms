@@ -78,6 +78,7 @@ export async function runOneCronJob(job: CronJob): Promise<void> {
           page: cfg.page,
         },
         articlesPerRun: job.ArticlesPerRun,
+        imageProvider: job.ImageAiProvider === "falai" ? "falai" : "passthrough",
         log: partialLog,
       });
       message = `inserted=${outcome.inserted} skipped=${outcome.skipped} errored=${outcome.errored}`;

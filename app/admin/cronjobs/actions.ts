@@ -294,6 +294,7 @@ export async function triggerCronJobAction(fd: FormData): Promise<void> {
           page: cfg.page,
         },
         articlesPerRun: job.ArticlesPerRun,
+        imageProvider: job.ImageAiProvider === "falai" ? "falai" : "passthrough",
         log: partialLog,
       });
       message = summarizeOutcome(outcome);
