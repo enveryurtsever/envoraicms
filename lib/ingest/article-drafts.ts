@@ -170,6 +170,16 @@ export async function markArticleDone(args: {
   `;
 }
 
+export async function markArticleSkipped(id: string | number, message: string): Promise<void> {
+  await sql`
+    UPDATE "ArticleDrafts"
+       SET "Status" = 'skipped',
+           "ProcessedAt" = NOW(),
+           "Message" = ${message.slice(0, 500)}
+     WHERE "DraftID" = ${id}
+  `;
+}
+
 export async function markArticleError(id: string | number, message: string): Promise<void> {
   await sql`
     UPDATE "ArticleDrafts"

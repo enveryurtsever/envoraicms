@@ -28,6 +28,7 @@ const NAV_ITEMS: (NavItem & { adminOnly?: boolean })[] = [
   { href: "/admin/authors",    label: "Authors",        icon: "users" },
   { href: "/admin/links",      label: "Pages",          icon: "link" },
   { href: "/admin/cronjobs",   label: "Automation",     icon: "clock" },
+  { href: "/admin/quality",    label: "Content Quality", icon: "search", adminOnly: true },
   { href: "/admin/apikeys",    label: "API Keys",       icon: "key", adminOnly: true, group: "System" },
   { href: "/admin/settings",   label: "Settings",       icon: "settings" },
   { href: "/admin/googlekit",  label: "Google Kit",     icon: "search", adminOnly: true },

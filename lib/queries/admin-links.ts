@@ -63,7 +63,8 @@ export async function updateLink(id: number, data: LinkInput): Promise<void> {
       "LinkNumber"  = ${data.order},
       "TopMenu"     = ${data.topMenu},
       "Footer"      = ${data.footer},
-      "IsActive"    = ${data.isActive}
+      "IsActive"    = ${data.isActive},
+      "ModifiedDate" = NOW()
     WHERE "LinkID" = ${id}
   `;
 }

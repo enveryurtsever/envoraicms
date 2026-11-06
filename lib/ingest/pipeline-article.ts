@@ -12,6 +12,7 @@ import {
   countPendingForCron,
   markArticleDone,
   markArticleError,
+  markArticleSkipped,
 } from "./article-drafts";
 
 /** One tick of an Article-kind cron job:
@@ -103,7 +104,7 @@ export async function runArticleJobTick(args: {
       if (!draftCat) {
         throw new Error(`Draft category #${draft.FK_CatID} not active`);
       }
-      const contentId = await expandArticleDraft({
+      const outcome = await expandArticleDraft({
         draft,
         category: draftCat,
         imageProvider,
@@ -111,7 +112,13 @@ export async function runArticleJobTick(args: {
         pickAuthor,
         staggerMinutes: result.inserted * publishStagger,
       });
-      await markArticleDone({ id: draft.DraftID, contentId });
+      if (outcome.contentId === null) {
+        await markArticleSkipped(draft.DraftID, outcome.reason);
+        log.push(`[draft#${draft.DraftID}] skipped: ${outcome.reason}`);
+        result.skipped += 1;
+        continue;
+      }
+      await markArticleDone({ id: draft.DraftID, contentId: outcome.contentId });
       result.inserted += 1;
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);

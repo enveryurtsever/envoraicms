@@ -4,7 +4,7 @@ import { unstable_cache } from "next/cache";
 import { sql } from "@/lib/db";
 import type { LinkRow } from "@/lib/types";
 
-const COLS = sql`"LinkID","LinkTitle","Link","LinkIcon","LinkSeo","LinkContent","LinkNumber","TopMenu","Footer"`;
+const COLS = sql`"LinkID","LinkTitle","Link","LinkIcon","LinkSeo","LinkContent","LinkNumber","TopMenu","Footer",COALESCE("ModifiedDate","CreatedDate") AS "LastUpdated"`;
 const ORDER = sql`ORDER BY "LinkNumber" ASC NULLS LAST, "LinkID" ASC`;
 
 function classify(rows: LinkRow[]) {

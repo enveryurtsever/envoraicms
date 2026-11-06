@@ -164,6 +164,8 @@ export async function updateContent(id: number, data: ContentInput): Promise<voi
       "ContentSource"          = ${source ? sql.json(source as never) : null},
       "Homepage"               = ${data.homepage},
       "IsActive"               = ${data.isActive},
+      "AwaitingActivation"     = "AwaitingActivation" AND NOT ${data.isActive}
+                                   AND ${data.publishDate}::timestamp > NOW(),
       "PublishDate"            = ${data.publishDate},
       "ModifiedDate"           = NOW()
     WHERE "ContentID" = ${id}
@@ -175,5 +177,5 @@ export async function softDeleteContent(id: number): Promise<void> {
 }
 
 export async function toggleContentActive(id: number, active: boolean): Promise<void> {
-  await sql`UPDATE "Contents" SET "IsActive" = ${active} WHERE "ContentID" = ${id}`;
+  await sql`UPDATE "Contents" SET "IsActive" = ${active}, "AwaitingActivation" = FALSE WHERE "ContentID" = ${id}`;
 }

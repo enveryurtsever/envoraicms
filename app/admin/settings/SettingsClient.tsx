@@ -283,9 +283,9 @@ function ThemeTab({ settings, themes }: { settings: Settings; themes: Theme[] })
       />
       <Row
         label="View counts"
-        name="ShowViewCounts"
+        name="PublicViewCounts"
         type="switch"
-        checked={settings.ShowViewCounts}
+        checked={settings.PublicViewCounts}
         hint="Show read counts on article headers and the Popular sidebar. Off → counts are hidden site-wide (still tracked)."
       />
     </div>

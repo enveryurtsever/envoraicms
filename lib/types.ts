@@ -38,7 +38,11 @@ export type Settings = {
   AllowColorToggle: boolean;
   ShowHeaderMenu: boolean;
   ShowFooterMenu: boolean;
-  ShowViewCounts: boolean;
+  PublicViewCounts: boolean;
+  ReviewGateEnabled: boolean;
+  DuplicateWindowDays: number;
+  PublisherName: string | null;
+  ContactEmail: string | null;
   LlmsTxtEnabled: boolean;
   LlmsTxtIntro: string | null;
   SocialLinks: SocialLink[];
@@ -254,6 +258,7 @@ export type LinkRow = {
   LinkNumber: number | null;
   TopMenu: boolean;
   Footer: boolean;
+  LastUpdated: Date | string | null;
 };
 
 export type ContentListItem = Pick<

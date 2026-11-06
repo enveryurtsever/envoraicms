@@ -19,6 +19,5 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       },
     ],
     sitemap: absoluteUrl(settings.SiteUrl, "/sitemap.xml"),
-    host: settings.SiteUrl,
   };
 }

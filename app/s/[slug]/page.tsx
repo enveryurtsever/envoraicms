@@ -6,7 +6,7 @@ import { getLinkBySlug } from "@/lib/queries/links";
 import { getSettings } from "@/lib/queries/settings";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
-import { absoluteUrl } from "@/lib/utils";
+import { absoluteUrl, formatDateLong, toISO } from "@/lib/utils";
 
 // Dynamic: the root layout reads request headers/cookies, so a static
 // prerender here throws DYNAMIC_SERVER_USAGE. DB reads remain cached via
@@ -55,6 +55,11 @@ export default async function StaticPage({
 
       <header className="mb-6 border-b border-neutral-200 pb-4 dark:border-neutral-700">
         <h1 className="text-2xl font-bold text-neutral-900 md:text-3xl dark:text-neutral-100">{link.LinkTitle}</h1>
+        {link.LastUpdated ? (
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            Last updated <time dateTime={toISO(link.LastUpdated)}>{formatDateLong(link.LastUpdated)}</time>
+          </p>
+        ) : null}
       </header>
 
       {sanitized ? (

@@ -43,7 +43,7 @@ Return STRICT JSON with these exact keys:
 - short: 1-2 sentences summarizing the story (<= 220 chars)
 - detail: LONG HTML body, 700-1000 words, structured like a wire-service / Al Jazeera / Reuters feature. Required:
     1. Opening paragraph: who/what/where/when in one tight paragraph. Full names and titles on first mention.
-    2. Direct quotes: at least one quoted statement with attribution ("X said", "according to Y"). Quotes inside &ldquo; / &rdquo; or straight quotes.
+    2. Direct quotes: only statements that appear word for word in the source, with attribution ("X said", "according to Y"). Quotes inside &ldquo; / &rdquo; or straight quotes.
     3. One <h2> subheading in the middle signaling a thematic shift.
     4. Specific numbers, dates, proper nouns woven throughout — no vague "some", "many", "recently".
     5. At least one paragraph of context/background explaining why the story matters.
@@ -114,7 +114,7 @@ Return {"suggestion":"kw1, kw2, ..."}.`,
       "Prompt that expands the content body to 700-1000 words of HTML, including internal search-link rules.",
     template: `Expand / rewrite this into a 700-1000 word news article in HTML. Rules:
 - opening paragraph answers who/what/where/when
-- at least one direct quote with attribution
+- direct quotes only if the supplied material contains them, with attribution; never invent a source
 - one <h2> subheading mid-article
 - allowed tags: <p>, <h2>, <strong>, <em>, <ul>, <li>, <a>
 - no <html>, <body>, <script>, <img>, <iframe>
@@ -155,7 +155,7 @@ Return STRICT JSON with these exact keys:
 - short: 1-2 sentences, <= 220 characters.
 - detail: 700-1000 words of HTML. Required structure:
     1. Opening paragraph answering who/what/where/when in concrete terms.
-    2. At least one direct quote with attribution. Make sources plausible (industry analysts, named experts).
+    2. Direct quotes only when they appear word for word in the source material. Never invent a source.
     3. Two or three <h2> subheadings that break the article into distinct angles (context / what's new / why it matters). Headings must signal a real shift in topic, not just a label.
     4. Keep each <p> short: 2 to 4 sentences, never longer than ~80 words. Wall-of-text paragraphs are not acceptable. Split or move material under an <h2> instead.
     5. Use a <ul><li> list whenever the source enumerates three or more parallel items (bug fixes, features, products). Do not pack enumerations into a single long paragraph.

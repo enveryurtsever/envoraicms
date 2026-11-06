@@ -40,12 +40,20 @@ export async function GET() {
   const now = new Date();
   const newsCutoff = now.getTime() - NEWS_WINDOW_MS;
 
+  // Listing pages change only when an article in them does.
+  const lastChanged = (rows: typeof contents) =>
+    rows.reduce<Date | null>((latest, c) => {
+      const changed = new Date(c.ModifiedDate ?? c.PublishDate);
+      return !latest || changed > latest ? changed : latest;
+    }, null);
+  const lastmodTag = (date: Date | null) =>
+    date ? `\n    <lastmod>${toISO(date)}</lastmod>` : "";
+
   const parts: string[] = [];
 
   parts.push(
     `  <url>
-    <loc>${xmlEscape(base)}</loc>
-    <lastmod>${toISO(now)}</lastmod>
+    <loc>${xmlEscape(base)}</loc>${lastmodTag(lastChanged(contents))}
     <changefreq>hourly</changefreq>
     <priority>1.0</priority>
   </url>`,
@@ -54,8 +62,9 @@ export async function GET() {
   for (const c of categories) {
     parts.push(
       `  <url>
-    <loc>${xmlEscape(absoluteUrl(base, `/${c.CatSeo}`))}</loc>
-    <lastmod>${toISO(now)}</lastmod>
+    <loc>${xmlEscape(absoluteUrl(base, `/${c.CatSeo}`))}</loc>${lastmodTag(
+      lastChanged(contents.filter((item) => item.CatSeo === c.CatSeo)),
+    )}
     <changefreq>hourly</changefreq>
     <priority>0.8</priority>
   </url>`,

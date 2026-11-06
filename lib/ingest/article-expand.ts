@@ -10,9 +10,15 @@ import { downloadAndStoreImage } from "./download-image";
 import { fixSearchLinks } from "./sanitize-links";
 import { currentDateContext } from "./prompt-context";
 import { getSettings } from "@/lib/queries/settings";
+import { evaluateForPublish } from "./gate";
+import { GROUNDING_RULES } from "./gate/checks";
+import { findNewsSources } from "./gate/sources";
+import type { GateSource } from "./gate";
 import {
   languageEnglishName,
   locationEnglishName,
+  newsLanguage,
+  serpapiGeo,
 } from "@/lib/site-language";
 import type { AuthorPicker } from "@/lib/queries/authors";
 import {
@@ -40,9 +46,13 @@ type ExpandedArticle = {
   importance?: number;
 };
 
-/** Expands an ArticleDraft into a full article + image, INSERTs into Contents,
- *  returns the new ContentID. Caller is responsible for marking the draft
- *  done/error. */
+export type ExpandOutcome =
+  | { contentId: number }
+  | { contentId: null; reason: string };
+
+/** Finds source reporting for a draft, writes the article from it, runs the
+ *  publishing checks, and INSERTs into Contents. contentId is null when the
+ *  draft was dropped. Caller is responsible for marking the draft. */
 export async function expandArticleDraft(args: {
   draft: ArticleDraft;
   category: IngestCategory;
@@ -53,7 +63,7 @@ export async function expandArticleDraft(args: {
    *  spreads across a believable window instead of clustering on one
    *  identical timestamp. */
   staggerMinutes?: number;
-}): Promise<number> {
+}): Promise<ExpandOutcome> {
   const { draft, category, imageProvider, log, pickAuthor, staggerMinutes = 0 } = args;
 
   // 1) Content AI fills in the full body + meta fields.
@@ -64,9 +74,27 @@ export async function expandArticleDraft(args: {
   const languageName = languageEnglishName(settings.SiteLanguage);
   const countryName = locationEnglishName(settings.SiteLocation);
 
+  // Trend-driven drafts begin with only a keyword, so real reporting has to be
+  // found first. Checked before the AI call so an unsourced draft costs nothing.
+  const sources = await findNewsSources({
+    query: draft.TrendQuery?.trim() || draft.Title,
+    location: serpapiGeo(settings.SiteLocation),
+    language: newsLanguage(settings.SiteLanguage),
+  }).catch((err): GateSource[] => {
+    log.push(
+      `[draft#${draft.DraftID}] source search failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return [];
+  });
+  if (sources.length === 0 && settings.ReviewGateEnabled) {
+    return { contentId: null, reason: "No source reporting found for this topic." };
+  }
+
   const systemTemplate =
     (await getPromptTemplate("article_expand")) || DEFAULT_EXPAND_SYSTEM;
-  const systemPrompt = systemTemplate
+  const systemPrompt = (systemTemplate + GROUNDING_RULES)
     .replace(/\{language\}/g, languageName)
     .replace(/\{country\}/g, countryName);
   const userPrompt = buildExpandPrompt({
@@ -74,6 +102,7 @@ export async function expandArticleDraft(args: {
     category,
     languageName,
     countryName,
+    sources,
   });
 
   const expanded = await contentAI.generateJSON<ExpandedArticle>({
@@ -82,6 +111,19 @@ export async function expandArticleDraft(args: {
   });
   validateExpanded(expanded);
   expanded.detail = fixSearchLinks(expanded.detail);
+
+  const gate = await evaluateForPublish({
+    title: expanded.title,
+    detail: expanded.detail,
+    keywords: expanded.keywords,
+    categoryName: category.CatName,
+    sources,
+  });
+  if (gate.status === "rejected") {
+    return { contentId: null, reason: gate.reasons.join("; ") };
+  }
+  expanded.title = gate.title;
+  expanded.detail = gate.detail;
 
   // 2) Slug — prefer the freshly produced one, fall back to the seed slug.
   let slug = expanded.slug ? slugify(expanded.slug) : "";
@@ -138,21 +180,27 @@ export async function expandArticleDraft(args: {
   const homepage = importance >= 7;
   const author = pickAuthor(category.CatID);
   const isActive = staggerMinutes <= 0;
+  const primarySource = sources[0] ?? null;
+  const sourceJson = primarySource?.publisher
+    ? JSON.stringify({ title: primarySource.publisher, href: primarySource.url })
+    : null;
   const rows = await sql<{ ContentID: number }[]>`
     INSERT INTO "Contents" (
       "FK_CatID","FK_LangID","ContentTitle","ContentShort","ContentDetail",
       "ContentKeywords","ContentDesc","ContentImage","ContentSeo",
       "ContentURL","ContentSource","Homepage","IsActive","IsDeleted",
-      "PublishDate","ModifiedDate","CreatedDate","ImagePrompt","FK_AuthorID"
+      "PublishDate","ModifiedDate","CreatedDate","ImagePrompt","FK_AuthorID",
+      "AwaitingActivation"
     ) VALUES (
       ${category.CatID}, 1, ${expanded.title}, ${expanded.short}, ${expanded.detail},
       ${expanded.keywords}, ${expanded.desc}, ${imagePath || null}, ${slug},
-      NULL, NULL, ${homepage}, ${isActive}, FALSE,
+      ${primarySource?.url ?? null}, ${sourceJson}, ${homepage}, ${isActive}, FALSE,
       NOW() + (${staggerMinutes} || ' minutes')::interval,
       NOW() + (${staggerMinutes} || ' minutes')::interval,
       NOW(),
       ${expanded.imagePrompt ?? draft.ImagePrompt ?? null},
-      ${author?.AuthorID ?? null}
+      ${author?.AuthorID ?? null},
+      ${!isActive}
     )
     RETURNING "ContentID"
   `;
@@ -179,7 +227,7 @@ export async function expandArticleDraft(args: {
     }
   }
 
-  return contentId;
+  return { contentId };
 }
 
 function clampInt(n: number, lo: number, hi: number): number {
@@ -208,8 +256,14 @@ function buildExpandPrompt(args: {
   category: IngestCategory;
   languageName: string;
   countryName: string;
+  sources: GateSource[];
 }): string {
   const d = args.draft;
+  const sourceBlock = args.sources.length
+    ? args.sources
+        .map((s, i) => `Source ${i + 1}: ${s.title} (${s.url})\n${s.text}`)
+        .join("\n\n")
+    : "(none supplied: report only what the brief states, with no quotes or statistics)";
   return [
     currentDateContext(),
     "",
@@ -222,9 +276,11 @@ function buildExpandPrompt(args: {
     d.Summary ? `Seed summary: ${d.Summary}` : "",
     d.Keywords ? `Seed keywords: ${d.Keywords}` : "",
     "",
-    `Write a fresh article in ${args.languageName} from this brief. The trend that inspired the piece was searched in the past few days, so treat the angle as current news, not evergreen reference. Lead with a concrete fact, scene, or named person in the very first sentence; do not restate the headline. No throat-clearing intro phrases.`,
+    `SOURCE MATERIAL:\n${sourceBlock}`,
+    "",
+    `Write a fresh article in ${args.languageName} from this source material. The trend that inspired the piece was searched in the past few days, so treat the angle as current news, not evergreen reference. Lead with a concrete fact, scene, or named person in the very first sentence; do not restate the headline. No throat-clearing intro phrases.`,
     "Return strict JSON with: title, short, detail (HTML), keywords, desc, slug, imagePrompt, importance (1-10).",
-    "The detail must be 700-1000 words, calm professional journalism tone, with two or three <h2> section headings that break the article into distinct angles (e.g. context / what's new / why it matters), at least one direct quote with attribution, and 3 to 5 internal search links of the form <a href=\"/search/KEYWORD\">phrase</a>.",
+    "The detail runs up to 1000 words, as long as the source material supports and no longer, in a calm professional journalism tone, with two or three <h2> section headings that break the article into distinct angles (e.g. context / what's new / why it matters), and 3 to 5 internal search links of the form <a href=\"/search/KEYWORD\">phrase</a>.",
     "Paragraph rule: keep each <p> short, 2 to 4 sentences max, never longer than ~80 words. Long paragraphs read as wall-of-text. If you have more material on one point, split it into two paragraphs or move part of it under an <h2>.",
     "When the source enumerates items (bug fixes, features, models, products), use a <ul><li> list rather than packing them into one long paragraph. Lists are also preferred over prose for any sequence of three or more parallel items.",
     "Do not dump raw issue tracker IDs (#123456789, JIRA-1234, CVE-XXXX-YYYY) into the prose. If a bug or issue is mentioned, summarize it in plain prose; only include an ID inline when it adds reader value, and at most once or twice per article.",
@@ -244,7 +300,7 @@ Voice and style:
 - Sound like a real journalist with a beat. Confident, calm, specific. No hedging intro filler.
 - Lead with a fact, scene, or named person in the first sentence. Do not open by restating the headline.
 - Vary sentence and paragraph length. Some short, some longer. Do not repeat the same connective word ("Moreover" / "Furthermore" / their equivalents in the output language) more than once across the whole piece.
-- Quote at least one named source. If the brief does not supply one, attribute to a plausible expert with a real-sounding role and organization. Keep quotes short and conversational, not corporate.
+- Quote a person only when the source material contains that exact quote. Never invent a source.
 - Use specific numbers, dates, and proper nouns where they help. Avoid vague "many", "some", "recently" (or their equivalents) without backing.
 - Do not moralize, do not editorialize, do not close with a "looking forward" wrap-up paragraph.
 
@@ -264,9 +320,9 @@ Editorial safety — strict, applies to title, short, detail, desc:
 JSON keys:
 - title: a real-sounding headline. Do not force the keyword to the front. Do not end with a stacked-noun phrase. 50 to 75 characters typical.
 - short: 1 or 2 natural sentences, up to 220 characters.
-- detail: 700 to 1000 words of HTML. Required structure:
+- detail: up to 1000 words of HTML, as long as the source material supports. Required structure:
     1. Opening paragraph answering who, what, where, when in concrete terms.
-    2. At least one direct quote with attribution.
+    2. Direct quotes only when they appear word for word in the source material.
     3. Two or three <h2> subheadings that break the article into distinct angles (e.g. context, what's new, why it matters). Headings must signal a real shift in topic, not just a label.
     4. Keep each <p> short: 2 to 4 sentences, never longer than ~80 words. Wall-of-text paragraphs are not acceptable. Split or move material under an <h2> instead.
     5. Use a <ul><li> list whenever the source enumerates three or more parallel items (bug fixes, features, products). Do not pack enumerations into a single long paragraph.

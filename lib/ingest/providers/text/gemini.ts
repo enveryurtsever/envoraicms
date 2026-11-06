@@ -1,3 +1,4 @@
+import { GROUNDING_RULES } from "@/lib/ingest/gate/checks";
 import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type {
@@ -90,7 +91,7 @@ Return STRICT JSON with these exact keys:
 - short: 1-2 sentences summarizing the story (<= 220 chars)
 - detail: LONG HTML body, 700-1000 words, structured like a wire-service / Al Jazeera / Reuters feature. Required:
     1. Opening paragraph: who/what/where/when in one tight paragraph. Full names and titles on first mention.
-    2. Direct quotes: at least one quoted statement with attribution ("X said", "according to Y"). Quotes inside &ldquo; / &rdquo; or straight quotes.
+    2. Direct quotes: only statements that appear word for word in the source, with attribution ("X said", "according to Y"). Quotes inside &ldquo; / &rdquo; or straight quotes.
     3. One <h2> subheading in the middle signaling a thematic shift.
     4. Specific numbers, dates, proper nouns woven throughout. No vague "some", "many", or "recently" without backing.
     5. At least one paragraph of context/background explaining why the story matters.
@@ -144,6 +145,7 @@ export async function makeGeminiProvider(): Promise<TextAiProvider> {
       const languageName = languageEnglishName(settings.SiteLanguage);
       const countryName = locationEnglishName(settings.SiteLocation);
       const systemTemplate = ((await getPromptTemplate("ingest_system")) || REWRITE_SYSTEM)
+        .concat(GROUNDING_RULES)
         .replace(/\{language\}/g, languageName)
         .replace(/\{country\}/g, countryName);
       const prompt = `${currentDateContext()}
@@ -151,6 +153,8 @@ export async function makeGeminiProvider(): Promise<TextAiProvider> {
 Output language: ${languageName}. Target audience: readers in ${countryName}.
 
 Category: ${cat.CatName}
+
+SOURCE MATERIAL:
 Original title: ${article.title}
 Original excerpt: ${article.excerpt ?? ""}
 Original body:

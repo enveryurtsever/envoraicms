@@ -11,6 +11,8 @@ import {
   ensureUniqueSlug,
   insertIngestedContent,
 } from "./db";
+import { evaluateForPublish } from "./gate";
+import { resolveSource } from "./gate/sources";
 import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
 export type PipelineInput = {
@@ -50,12 +52,32 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutcome
         continue;
       }
       const fullContent = await safeCall(() => news.fetchArticleContent(article.url));
-      const rewritten = await text.rewrite(article, cat, fullContent);
+      const source = await resolveSource({
+        url: article.url,
+        title: article.title,
+        publisher: article.publisher?.name,
+        suppliedText: fullContent ?? article.excerpt,
+      });
+      const rewritten = await text.rewrite(article, cat, source?.text ?? fullContent);
       if (rewritten.skip) {
         skipped += 1;
         log.push(`[skip] ai-filter reason="${rewritten.skipReason ?? "unspecified"}" url=${article.url}`);
         continue;
       }
+      const gate = await evaluateForPublish({
+        title: rewritten.title,
+        detail: rewritten.detail,
+        keywords: rewritten.keywords,
+        categoryName: cat.CatName,
+        sources: source ? [source] : [],
+      });
+      if (gate.status === "rejected") {
+        skipped += 1;
+        log.push(`[skip] gate: ${gate.reasons.join("; ")} url=${article.url}`);
+        continue;
+      }
+      rewritten.title = gate.title;
+      rewritten.detail = gate.detail;
       rewritten.slug = await ensureUniqueSlug(rewritten.slug);
 
       let imagePath: string;

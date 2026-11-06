@@ -10,16 +10,18 @@ type DueRow = {
   CatSeo: string;
 };
 
-// Flips IsActive=TRUE for any Contents row whose scheduled PublishDate has
-// arrived, then fires a Google indexing dispatch for each newly-live row.
+// Flips IsActive=TRUE for rows the pipeline scheduled once PublishDate has
+// arrived. Other inactive rows (held for review, unpublished by an editor) stay
+// inactive, then fires a Google indexing dispatch for each newly-live row.
 // Called once per scheduler tick (every 60s) and is cluster-safe via the
 // outer pg_advisory_lock the scheduler already holds during a tick.
 export async function activateScheduledArticles(): Promise<number> {
   const due = await sql<DueRow[]>`
     UPDATE "Contents" c
-       SET "IsActive" = TRUE
+       SET "IsActive" = TRUE, "AwaitingActivation" = FALSE
       FROM "Categories" cat
      WHERE c."FK_CatID"   = cat."CatID"
+       AND c."AwaitingActivation" = TRUE
        AND c."IsActive"   = FALSE
        AND c."IsDeleted"  = FALSE
        AND c."PublishDate" <= NOW()

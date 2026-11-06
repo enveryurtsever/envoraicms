@@ -20,6 +20,8 @@ import {
   type Draft,
 } from "./drafts";
 import { ensureUniqueSlug } from "./db";
+import { evaluateForPublish } from "./gate";
+import { resolveSource } from "./gate/sources";
 import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
 const PROVIDER = "newsnow";
@@ -170,8 +172,14 @@ export async function processPendingDrafts(args: {
           : null;
 
       log.push(`[draft#${draft.DraftID}] rewriting "${article.title?.slice(0, 70) ?? ""}"`);
+      const source = await resolveSource({
+        url: article.url ?? draft.SourceUrl,
+        title: article.title,
+        publisher: article.publisher?.name,
+        suppliedText: article.text ?? article.excerpt,
+      });
       const rewritten = await rewriteWithCategory({
-        article,
+        article: source ? { ...article, text: source.text } : article,
         categories,
         hintCategory: hint,
       });
@@ -190,6 +198,24 @@ export async function processPendingDrafts(args: {
         (rewritten.categorySlug
           ? categories.find((c) => c.CatSeo === rewritten.categorySlug)
           : null) ?? categories[0];
+
+      // Checked before image generation so a rejected article costs no image.
+      const gate = await evaluateForPublish({
+        title: rewritten.title,
+        detail: rewritten.detail,
+        keywords: rewritten.keywords,
+        categoryName: cat.CatName,
+        sources: source ? [source] : [],
+      });
+      if (gate.status === "rejected") {
+        const reason = gate.reasons.join("; ");
+        await markSkipped(draft.DraftID, reason);
+        log.push(`[draft#${draft.DraftID}] skipped: ${reason}`);
+        result.skipped += 1;
+        continue;
+      }
+      rewritten.title = gate.title;
+      rewritten.detail = gate.detail;
 
       // Handle image generation based on selected Image Generator setting
       let effectiveProvider = args.imageProvider;

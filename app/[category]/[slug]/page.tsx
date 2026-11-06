@@ -148,7 +148,7 @@ export default async function ArticlePage({
             ) : null}
             <span aria-hidden>•</span>
             <span>{minutes} min read</span>
-            {settings.ShowViewCounts ? (
+            {settings.PublicViewCounts ? (
               <>
                 <span aria-hidden>•</span>
                 <span
@@ -336,7 +336,7 @@ export default async function ArticlePage({
                           </h3>
                           <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                             <span>{item.CatName}</span>
-                            {settings.ShowViewCounts && (item.ViewCount ?? 0) > 0 ? (
+                            {settings.PublicViewCounts && (item.ViewCount ?? 0) > 0 ? (
                               <>
                                 <span aria-hidden>•</span>
                                 <span aria-label={`${item.ViewCount} views`}>

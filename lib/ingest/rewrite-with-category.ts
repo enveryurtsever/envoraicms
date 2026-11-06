@@ -9,6 +9,7 @@ import { requireApiKey } from "@/lib/ingest/config";
 import { getPromptTemplate } from "@/lib/queries/prompts";
 import { REWRITE_SYSTEM } from "@/lib/ingest/providers/text/gemini";
 import { fixSearchLinks } from "@/lib/ingest/sanitize-links";
+import { GROUNDING_RULES } from "@/lib/ingest/gate/checks";
 import { currentDateContext } from "@/lib/ingest/prompt-context";
 import { getSettings } from "@/lib/queries/settings";
 import {
@@ -63,7 +64,7 @@ export async function rewriteWithCategory(args: {
   const countryName = locationEnglishName(settings.SiteLocation);
 
   const baseTemplate = (await getPromptTemplate("ingest_system")) || REWRITE_SYSTEM;
-  const systemPrompt = (baseTemplate + CATEGORY_INSTRUCTIONS)
+  const systemPrompt = (baseTemplate + CATEGORY_INSTRUCTIONS + GROUNDING_RULES)
     .replace(/\{language\}/g, languageName)
     .replace(/\{country\}/g, countryName);
 
@@ -80,6 +81,7 @@ Site categories (slug :: name) — pick exactly one slug:
 ${categoryList || "(none defined)"}
 ${args.hintCategory ? `Provider hint category: ${args.hintCategory}` : ""}
 
+SOURCE MATERIAL:
 Original title: ${article.title}
 Original excerpt: ${article.excerpt ?? ""}
 Original body:

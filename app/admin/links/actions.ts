@@ -107,9 +107,8 @@ function corePagePrompt(args: {
   siteUrl: string;
   description: string;
   contactEmail: string | null;
+  publisherName: string | null;
   language: string;
-  /** Human "Month Year" for the current date, e.g. "May 2026". */
-  nowLabel: string;
 }): { system: string; user: string } {
   const system =
     "You write static legal/contact pages for news websites. " +
@@ -117,22 +116,22 @@ function corePagePrompt(args: {
     "Reply with a JSON object {\"title\": string, \"html\": string}. " +
     `The title is this page's name in ${args.language} (e.g. the ${args.language} equivalent of "Privacy Policy"). ` +
     "The html field must be a self-contained body (no <html>, <head>, or <body> tags). Use semantic " +
-    "<h2>/<h3>/<p>/<ul>/<li> tags. Approximately 500–800 words.";
+    "<h2>/<h3>/<p>/<ul>/<li> tags. Approximately 500–800 words. " +
+    "Do not state a date or a \"last updated\" line: the site shows the real one. " +
+    "Never invent an address, phone number, company name, or contact detail; use only those provided.";
 
-  // The model has no reliable sense of "today" and will otherwise stamp a
-  // date from its training cutoff. Hand it the real current date explicitly.
   const ctx = `Site name: ${args.siteName}
 Site URL: ${args.siteUrl}
 Site description: ${args.description}
-Contact email: ${args.contactEmail ?? "not provided"}
-Today's date: ${args.nowLabel}`;
+Publisher (responsible business or person): ${args.publisherName ?? "not provided"}
+Contact email: ${args.contactEmail ?? "not provided"}`;
 
   const ask =
     args.kind === "privacy"
-      ? `Write a generic Privacy Policy covering: data we collect (analytics cookies, contact-form submissions), how we use it, third-party processors (Google Analytics, AdSense), user rights (access, deletion), and contact instructions. Add a "last updated" line at the top dated ${args.nowLabel} (phrased in ${args.language}).`
+      ? `Write a generic Privacy Policy covering: data we collect (analytics and advertising cookies, and anything readers choose to send by email; the site has no contact form, so do not mention one), how we use it, third-party processors (Google Analytics, Google AdSense), a clear statement that third parties including Google may place and read cookies in visitors' browsers, or use web beacons and IP addresses, to serve and measure ads based on prior visits to this and other sites, how to opt out through Google Ads Settings, user rights (access, deletion), and contact instructions.`
       : args.kind === "terms"
-        ? `Write a generic Terms of Service covering: acceptance, intellectual property, user-submitted content, prohibited uses, disclaimers, limitation of liability, governing law, and changes to terms. Add a "last updated" line at the top dated ${args.nowLabel} (phrased in ${args.language}).`
-        : "Write a friendly Contact page that invites readers to reach out. Mention the contact email if provided, otherwise instruct readers to use a future contact form. Keep it short (3 short paragraphs).";
+        ? `Write a generic Terms of Service covering: acceptance, intellectual property, user-submitted content, prohibited uses, disclaimers, limitation of liability, governing law, and changes to terms.`
+        : "Write a friendly Contact page that invites readers to reach out. State the publisher and contact email exactly as provided. If either is not provided, leave it out and do not mention a contact form. Keep it short (3 short paragraphs).";
 
   return { system, user: `${ctx}\n\nTask: ${ask}` };
 }
@@ -159,16 +158,14 @@ export async function generateCorePagesAction(): Promise<{
   const skipped: string[] = [];
   const errors: { slug: string; message: string }[] = [];
 
-  // Pull a contact email out of MailSender if present.
+  // Prefer the public contact address; older sites only have MailSender.
   const mailRow = await sql<{ MailSender: string | null }[]>`
     SELECT "MailSender" FROM "Settings"
     WHERE "IsDeleted" = FALSE ORDER BY "SettingsID" ASC LIMIT 1
   `;
-  const contactEmail = mailRow[0]?.MailSender ?? null;
+  const contactEmail = settings.ContactEmail ?? mailRow[0]?.MailSender ?? null;
 
   const language = languageEnglishName(settings.SiteLanguage);
-  // Real current date, so the AI can't fall back to a training-cutoff year.
-  const nowLabel = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
 
   let order = 100;
   for (const page of CORE_PAGES) {
@@ -183,8 +180,8 @@ export async function generateCorePagesAction(): Promise<{
         siteUrl: settings.SiteUrl,
         description: settings.Description,
         contactEmail,
+        publisherName: settings.PublisherName,
         language,
-        nowLabel,
       });
       const out = await ai.generateJSON<{ html?: string; title?: string }>({ system, user });
       const html = sanitize(typeof out?.html === "string" ? out.html : null);

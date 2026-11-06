@@ -461,4 +461,50 @@ CREATE INDEX IF NOT EXISTS "idx_loginattempts_ip_created"
 ALTER TABLE "Settings"
   ADD COLUMN IF NOT EXISTS "SiteLocation" TEXT DEFAULT 'US';
 
+-- Publishing standards: the verification gate and the publisher details used
+-- on legal and contact pages. Editable in /admin/quality.
+ALTER TABLE "Settings"
+  ADD COLUMN IF NOT EXISTS "ReviewGateEnabled"   BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS "DuplicateWindowDays" INTEGER NOT NULL DEFAULT 60,
+  ADD COLUMN IF NOT EXISTS "PublisherName"       TEXT,
+  ADD COLUMN IF NOT EXISTS "ContactEmail"        TEXT,
+  -- Replaces ShowViewCounts so every site starts hidden without a later
+  -- migration overwriting an owner's choice to turn counts back on.
+  ADD COLUMN IF NOT EXISTS "PublicViewCounts"    BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Rows the scheduler may publish. Without this flag it would also bring back
+-- articles an editor deliberately unpublished.
+ALTER TABLE "Contents"
+  ADD COLUMN IF NOT EXISTS "AwaitingActivation" BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Articles already scheduled when this column first appears.
+UPDATE "Contents" SET "AwaitingActivation" = TRUE
+ WHERE "IsActive" = FALSE AND "IsDeleted" = FALSE
+   AND "PublishDate" > NOW();
+
+ALTER TABLE "Links" ADD COLUMN IF NOT EXISTS "ModifiedDate" TIMESTAMP;
+
+-- Retired article URLs: 301 to a replacement, or 410 when gone for good.
+CREATE TABLE IF NOT EXISTS "UrlRules" (
+  "Path"         TEXT PRIMARY KEY,
+  "Status"       SMALLINT NOT NULL CHECK ("Status" IN (301, 410)),
+  "Target"       TEXT,
+  "FK_ContentID" INTEGER,
+  "CreatedDate"  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Stored copies of the default prompts told the model to invent sources.
+UPDATE "Prompts" SET "Template" = REPLACE("Template",
+  'Quote at least one named source. If the brief does not supply one, attribute to a plausible expert with a real-sounding role and organization.',
+  'Quote a person only when the source material contains that exact quote. Never invent a source.')
+ WHERE "Template" LIKE '%plausible expert%';
+UPDATE "Prompts" SET "Template" = REPLACE("Template",
+  'At least one direct quote with attribution. Make sources plausible (industry analysts, named experts).',
+  'Direct quotes only when they appear word for word in the source material. Never invent a source.')
+ WHERE "Template" LIKE '%Make sources plausible%';
+UPDATE "Prompts" SET "Template" = REPLACE("Template",
+  'Direct quotes: at least one quoted statement with attribution',
+  'Direct quotes: only statements that appear word for word in the source, with attribution')
+ WHERE "Template" LIKE '%at least one quoted statement with attribution%';
+
 COMMIT;
