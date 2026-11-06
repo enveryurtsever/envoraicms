@@ -36,7 +36,7 @@ export function LinkFields({ value }: { value?: LinkRow }) {
         label="SEO slug"
         name="LinkSeo"
         defaultValue={v?.LinkSeo}
-        hint="if filled, /l/<slug> renders a static content page"
+        hint="if filled, /s/<slug> renders a static content page"
       />
       <Row label="Sort order" name="LinkNumber" type="number" defaultValue={String(v?.LinkNumber ?? 0)} />
 

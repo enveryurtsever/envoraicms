@@ -93,7 +93,7 @@ export function LinksClient({ links }: { links: LinkRow[] }) {
                   {l.Link ? <code>{l.Link}</code> : null}
                   {l.LinkSeo ? (
                     <div>
-                      <code>/l/{l.LinkSeo}</code>
+                      <code>/s/{l.LinkSeo}</code>
                     </div>
                   ) : null}
                 </td>

@@ -32,7 +32,7 @@ const loadFooter = unstable_cache(
     return classify(rows);
   },
   ["links:footer"],
-  { revalidate: 3600, tags: ["links"] }
+  { revalidate: 60, tags: ["links"] }
 );
 
 export const getFooterLinks = cache(loadFooter);
@@ -48,25 +48,22 @@ const loadTopMenu = unstable_cache(
     return rows;
   },
   ["links:top"],
-  { revalidate: 3600, tags: ["links"] }
+  { revalidate: 60, tags: ["links"] }
 );
 
 export const getTopMenuLinks = cache(loadTopMenu);
 
-const loadBySlug = unstable_cache(
-  async (slug: string): Promise<LinkRow | null> => {
-    const rows = await sql<LinkRow[]>`
-      SELECT ${COLS}
-      FROM "Links"
-      WHERE "LinkSeo" = ${slug}
-        AND "IsActive" = true
-        AND "IsDeleted" = false
-      LIMIT 1
-    `;
-    return rows[0] ?? null;
-  },
-  ["link:by-slug"],
-  { revalidate: 3600, tags: ["links"] }
-);
-
-export const getLinkBySlug = cache((slug: string) => loadBySlug(slug));
+// Read directly, not through unstable_cache. Each PM2 worker keeps its own copy
+// of that cache and revalidateTag only clears the worker that ran it, so one
+// worker could keep answering 404 for an hour after a page was created.
+export const getLinkBySlug = cache(async (slug: string): Promise<LinkRow | null> => {
+  const rows = await sql<LinkRow[]>`
+    SELECT ${COLS}
+    FROM "Links"
+    WHERE "LinkSeo" = ${slug}
+      AND "IsActive" = true
+      AND "IsDeleted" = false
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+});
