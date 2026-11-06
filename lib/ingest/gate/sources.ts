@@ -1,7 +1,7 @@
 import "server-only";
 import { requireApiKey } from "@/lib/ingest/config";
 import { alreadyIngested } from "@/lib/ingest/db";
-import { decodeEntities, htmlToText } from "./checks";
+import { decodeEntities, htmlToText, isFreshSource, MAX_SOURCE_AGE_DAYS } from "./checks";
 import type { GateSource } from "./engine";
 
 export const MIN_SOURCE_CHARS = 400;
@@ -80,16 +80,28 @@ export async function resolveSource(args: {
   title: string | null | undefined;
   publisher: string | null | undefined;
   suppliedText: string | null | undefined;
+  publishedAt?: string | null;
 }): Promise<GateSource | null> {
   const url = args.url ?? "";
   const supplied = htmlToText(args.suppliedText ?? "").slice(0, MAX_SOURCE_CHARS);
   const text =
     supplied.length >= MIN_SOURCE_CHARS ? supplied : url ? await fetchSourceText(url) : null;
   if (!text) return null;
-  return { url, title: args.title ?? "", publisher: args.publisher ?? null, text };
+  return {
+    url,
+    title: args.title ?? "",
+    publisher: args.publisher ?? null,
+    text,
+    publishedAt: args.publishedAt ?? null,
+  };
 }
 
-type NewsResult = { title?: unknown; link?: unknown; source?: { name?: unknown } };
+type NewsResult = {
+  title?: unknown;
+  link?: unknown;
+  iso_date?: unknown;
+  source?: { name?: unknown };
+};
 
 /** Finds real reporting on a trend, for jobs that start from a keyword. */
 export async function findNewsSources(args: {
@@ -101,7 +113,7 @@ export async function findNewsSources(args: {
   const key = await requireApiKey("serpapi", "trends_source");
   const url = new URL("https://serpapi.com/search.json");
   url.searchParams.set("engine", "google_news");
-  url.searchParams.set("q", args.query);
+  url.searchParams.set("q", `${args.query} when:${MAX_SOURCE_AGE_DAYS}d`);
   url.searchParams.set("gl", args.location.toLowerCase());
   url.searchParams.set("hl", args.language.toLowerCase());
   url.searchParams.set("api_key", key.plaintext);
@@ -114,6 +126,8 @@ export async function findNewsSources(args: {
   for (const row of (json?.news_results ?? []).slice(0, 8)) {
     if (sources.length >= (args.limit ?? 3)) break;
     if (typeof row.link !== "string" || typeof row.title !== "string") continue;
+    const publishedAt = typeof row.iso_date === "string" ? row.iso_date : null;
+    if (!isFreshSource(publishedAt)) continue;
     if (await alreadyIngested(row.link)) continue;
     const text = await fetchSourceText(row.link);
     if (!text) continue;
@@ -122,6 +136,7 @@ export async function findNewsSources(args: {
       title: decodeEntities(row.title),
       publisher: typeof row.source?.name === "string" ? row.source.name : null,
       text,
+      publishedAt,
     });
   }
   return sources;

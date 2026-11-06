@@ -1,4 +1,5 @@
 import "server-only";
+import { stripWww } from "@/lib/site-url";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { sql } from "@/lib/db";
@@ -55,7 +56,7 @@ const load = unstable_cache(
       : typeof r.SocialLinks === "string"
         ? safeParseArray(r.SocialLinks)
         : [];
-    return { ...r, SocialLinks: social } as Settings;
+    return { ...r, SiteUrl: stripWww(r.SiteUrl), SocialLinks: social } as Settings;
   },
   ["settings"],
   { revalidate: 3600, tags: ["settings"] }
@@ -90,7 +91,7 @@ export const getSettings = cache(async () => {
       Description: "ENVORAICMS — dynamic content platform",
       Keywords: "news, content, cms",
       SiteName: "ENVORAICMS",
-      SiteUrl: process.env.SITE_URL ?? "https://envoraicms.com",
+      SiteUrl: stripWww(process.env.SITE_URL ?? "https://envoraicms.com"),
       SiteLogo: null,
       Favicon: null,
       CoverImage: "/Upload/envoraicms_cover.jpg",

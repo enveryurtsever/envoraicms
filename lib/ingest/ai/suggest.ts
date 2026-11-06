@@ -1,6 +1,8 @@
 import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { requireApiKey } from "@/lib/ingest/config";
+import { geminiModelFor } from "@/lib/ingest/providers/text/gemini-model";
+import { currentDateContext } from "@/lib/ingest/prompt-context";
 import { getPromptTemplate } from "@/lib/queries/prompts";
 import { getSettings } from "@/lib/queries/settings";
 import {
@@ -107,7 +109,7 @@ async function buildPrompt(field: SuggestField, ctx: Ctx): Promise<string> {
 
 export async function suggestField(field: SuggestField, ctx: Ctx): Promise<string> {
   const key = await requireApiKey("gemini", "text_ai");
-  const modelName = (key.config.model as string | undefined) ?? "gemini-2.5-flash-lite";
+  const modelName = geminiModelFor(key.config);
   const client = new GoogleGenerativeAI(key.plaintext);
   const model = client.getGenerativeModel({
     model: modelName,
@@ -121,7 +123,7 @@ export async function suggestField(field: SuggestField, ctx: Ctx): Promise<strin
   const userPrompt = await buildPrompt(field, ctx);
   const res = await model.generateContent([
     { text: buildSystem(languageName, countryName) },
-    { text: userPrompt },
+    { text: `${currentDateContext()}\n\n${userPrompt}` },
   ]);
   const text = res.response.text();
   try {

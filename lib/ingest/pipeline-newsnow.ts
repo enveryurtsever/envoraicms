@@ -21,6 +21,7 @@ import {
 } from "./drafts";
 import { ensureUniqueSlug } from "./db";
 import { evaluateForPublish } from "./gate";
+import { isFreshSource, MAX_SOURCE_AGE_DAYS } from "./gate/checks";
 import { resolveSource } from "./gate/sources";
 import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
@@ -171,12 +172,21 @@ export async function processPendingDrafts(args: {
           ? ((article as { category?: string }).category as string)
           : null;
 
+      if (!isFreshSource(article.date)) {
+        const reason = `Source is older than ${MAX_SOURCE_AGE_DAYS} days.`;
+        await markSkipped(draft.DraftID, reason);
+        log.push(`[draft#${draft.DraftID}] skipped: ${reason}`);
+        result.skipped += 1;
+        continue;
+      }
+
       log.push(`[draft#${draft.DraftID}] rewriting "${article.title?.slice(0, 70) ?? ""}"`);
       const source = await resolveSource({
         url: article.url ?? draft.SourceUrl,
         title: article.title,
         publisher: article.publisher?.name,
         suppliedText: article.text ?? article.excerpt,
+        publishedAt: article.date,
       });
       const rewritten = await rewriteWithCategory({
         article: source ? { ...article, text: source.text } : article,

@@ -6,6 +6,7 @@ import type {
   RewrittenWithCategory,
 } from "@/lib/ingest/types";
 import { requireApiKey } from "@/lib/ingest/config";
+import { geminiModelFor } from "@/lib/ingest/providers/text/gemini-model";
 import { getPromptTemplate } from "@/lib/queries/prompts";
 import { REWRITE_SYSTEM } from "@/lib/ingest/providers/text/gemini";
 import { fixSearchLinks } from "@/lib/ingest/sanitize-links";
@@ -52,7 +53,7 @@ export async function rewriteWithCategory(args: {
   const { article, categories } = args;
 
   const key = await requireApiKey("gemini", "text_ai");
-  const modelName = (key.config.model as string | undefined) ?? "gemini-2.5-flash-lite";
+  const modelName = geminiModelFor(key.config);
   const client = new GoogleGenerativeAI(key.plaintext);
   const model = client.getGenerativeModel({
     model: modelName,
@@ -88,6 +89,7 @@ Original body:
 ${bodyText}
 
 Publisher: ${article.publisher?.name ?? "Unknown"}
+Published: ${article.date ?? "Unknown"}
 URL: ${article.url}
 
 Rewrite this as an original article in ${languageName} AND pick the best site

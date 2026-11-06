@@ -261,7 +261,7 @@ function buildExpandPrompt(args: {
   const d = args.draft;
   const sourceBlock = args.sources.length
     ? args.sources
-        .map((s, i) => `Source ${i + 1}: ${s.title} (${s.url})\n${s.text}`)
+        .map((s, i) => `Source ${i + 1}: ${s.title} (${s.url})${s.publishedAt ? `, published ${s.publishedAt}` : ""}\n${s.text}`)
         .join("\n\n")
     : "(none supplied: report only what the brief states, with no quotes or statistics)";
   return [

@@ -11,7 +11,18 @@ SOURCE RULES (these override every other instruction above, including any reques
 - Use quotation marks only for words that appear exactly in the source material. If it contains no quote, include no quotes.
 - Include a number, statistic, report, organization or job title only if it appears in the source material.
 - Never invent people, experts, sources, or events.
-- Keep the article as short as the source material requires. Do not pad it to reach a word count.`;
+- Keep the article as short as the source material requires. Do not pad it to reach a word count.
+- Give events the dates the source material gives them. Never present an older event as new.`;
+
+export const MAX_SOURCE_AGE_DAYS = 7;
+
+/** False only for a source known to be too old. A missing or unreadable date
+ *  passes, since many feeds omit it and search results are already recent. */
+export function isFreshSource(published: string | null | undefined, now = new Date()): boolean {
+  const time = published ? Date.parse(published) : NaN;
+  if (Number.isNaN(time)) return true;
+  return now.getTime() - time <= MAX_SOURCE_AGE_DAYS * 24 * 60 * 60 * 1000;
+}
 
 const ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",

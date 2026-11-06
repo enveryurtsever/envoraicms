@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { checkIpGuard, isBackgroundFetch, resolveClientIp } from "@/lib/security/ip-guard";
 import { matchUrlRule } from "@/lib/security/url-rules";
+import { stripWww } from "@/lib/site-url";
 
 // Five jobs: (1) temporarily ban IPs that request pages too quickly; (2) send
-// the www/non-www variant of the host to the one in SITE_URL; (3) answer retired
+// www hosts to the same host without www; (3) answer retired
 // article URLs with 301 or 410; (4) attach an x-pathname header to every request
 // so the root layout can skip rendering site chrome on /admin routes; (5) redirect /admin/* requests
 // with no session cookie to /admin/login. Real DB-level session validation
@@ -12,20 +13,7 @@ import { matchUrlRule } from "@/lib/security/url-rules";
 
 const COOKIE_NAME = "envoraicms_admin";
 
-function canonicalOrigin(): URL | null {
-  try {
-    return process.env.SITE_URL ? new URL(process.env.SITE_URL) : null;
-  } catch {
-    return null;
-  }
-}
-const CANONICAL = canonicalOrigin();
-
-// Only the www pair is redirected, so staging hosts and raw IPs keep working.
-function isWwwVariant(host: string | null): boolean {
-  if (!host || !CANONICAL) return false;
-  return host === `www.${CANONICAL.host}` || `www.${host}` === CANONICAL.host;
-}
+const SITE_ORIGIN = process.env.SITE_URL ? stripWww(process.env.SITE_URL) : null;
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -56,17 +44,19 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  if (isWwwVariant(req.headers.get("host"))) {
+  const host = req.headers.get("host");
+  if (host?.toLowerCase().startsWith("www.")) {
+    const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
     return new NextResponse(null, {
       status: 301,
-      headers: { Location: `${CANONICAL!.origin}${pathname}${req.nextUrl.search}` },
+      headers: { Location: `${proto}://${host.slice(4)}${pathname}${req.nextUrl.search}` },
     });
   }
 
   const rule = matchUrlRule(pathname);
   if (rule?.status === 301 && rule.target) {
     // Next rejects a relative Location from middleware.
-    const location = new URL(rule.target, CANONICAL?.origin ?? req.nextUrl.origin);
+    const location = new URL(rule.target, SITE_ORIGIN ?? req.nextUrl.origin);
     return new NextResponse(null, { status: 301, headers: { Location: location.toString() } });
   }
   if (rule?.status === 410) {

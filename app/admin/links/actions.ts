@@ -133,7 +133,7 @@ Contact email: ${args.contactEmail ?? "not provided"}`;
         ? `Write a generic Terms of Service covering: acceptance, intellectual property, user-submitted content, prohibited uses, disclaimers, limitation of liability, governing law, and changes to terms.`
         : "Write a friendly Contact page that invites readers to reach out. State the publisher and contact email exactly as provided. If either is not provided, leave it out and do not mention a contact form. Keep it short (3 short paragraphs).";
 
-  return { system, user: `${ctx}\n\nTask: ${ask}` };
+  return { system, user: `Today's date: ${new Date().toISOString().slice(0, 10)}\n${ctx}\n\nTask: ${ask}` };
 }
 
 async function linkSlugExists(slug: string): Promise<boolean> {

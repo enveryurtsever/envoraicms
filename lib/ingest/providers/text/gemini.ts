@@ -1,4 +1,5 @@
 import { GROUNDING_RULES } from "@/lib/ingest/gate/checks";
+import { geminiModelFor } from "./gemini-model";
 import "server-only";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type {
@@ -25,8 +26,7 @@ export function makeGeminiTextClient(args: {
   apiKey: string;
   config: Record<string, unknown>;
 }): TextAIClient {
-  const modelName =
-    (args.config.model as string | undefined) ?? "gemini-2.5-flash-lite";
+  const modelName = geminiModelFor(args.config);
   const client = new GoogleGenerativeAI(args.apiKey);
   return {
     name: "gemini",
@@ -124,7 +124,7 @@ Editorial safety — strict:
 
 export async function makeGeminiProvider(): Promise<TextAiProvider> {
   const key = await requireApiKey("gemini", "text_ai");
-  const modelName = (key.config.model as string | undefined) ?? "gemini-2.5-flash-lite";
+  const modelName = geminiModelFor(key.config);
   const client = new GoogleGenerativeAI(key.plaintext);
   const model = client.getGenerativeModel({
     model: modelName,
@@ -162,6 +162,7 @@ ${bodyText}
 
 Source keywords: ${article.keywords?.join(", ") ?? ""}
 Publisher: ${article.publisher?.name ?? "Unknown"}
+Published: ${article.date || "Unknown"}
 URL: ${article.url}
 
 Rewrite this as an original article in ${languageName} following the rules above. Return JSON only.`;

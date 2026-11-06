@@ -12,6 +12,7 @@ import {
   insertIngestedContent,
 } from "./db";
 import { evaluateForPublish } from "./gate";
+import { isFreshSource, MAX_SOURCE_AGE_DAYS } from "./gate/checks";
 import { resolveSource } from "./gate/sources";
 import { buildContentUrl, submitIndexingFireAndForget } from "@/lib/indexing/submit";
 
@@ -51,12 +52,18 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutcome
         log.push(`[skip] duplicate url=${article.url}`);
         continue;
       }
+      if (!isFreshSource(article.date)) {
+        skipped += 1;
+        log.push(`[skip] source older than ${MAX_SOURCE_AGE_DAYS} days url=${article.url}`);
+        continue;
+      }
       const fullContent = await safeCall(() => news.fetchArticleContent(article.url));
       const source = await resolveSource({
         url: article.url,
         title: article.title,
         publisher: article.publisher?.name,
         suppliedText: fullContent ?? article.excerpt,
+        publishedAt: article.date,
       });
       const rewritten = await text.rewrite(article, cat, source?.text ?? fullContent);
       if (rewritten.skip) {
