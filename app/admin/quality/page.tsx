@@ -3,12 +3,8 @@ import { requireRole } from "@/lib/auth/session";
 import { getSettings } from "@/lib/queries/settings";
 import { scanArchive, type ArchiveRow } from "@/lib/queries/archive";
 import { ConfirmActionButton } from "./ConfirmActionButton";
-import {
-  redirectAllDuplicatesAction,
-  redirectArticleAction,
-  removeArticleAction,
-  saveQualitySettings,
-} from "./actions";
+import { QualitySettingsForm, RedirectForm, ScanButton } from "./QualityControls";
+import { redirectAllDuplicatesAction, removeArticleAction } from "./actions";
 
 export const metadata = { title: "Content Quality" };
 
@@ -36,7 +32,7 @@ export default async function QualityPage({
         <h2>Content Quality</h2>
       </div>
 
-      <form action={saveQualitySettings} className="card">
+      <QualitySettingsForm>
         <h3>Automatic publishing checks</h3>
         <div className="form-row">
           <label htmlFor="ReviewGateEnabled">Verification</label>
@@ -94,8 +90,7 @@ export default async function QualityPage({
             />
           </div>
         </div>
-        <button type="submit" className="btn">Save</button>
-      </form>
+      </QualitySettingsForm>
 
       <div className="card" style={{ marginTop: "1rem" }}>
         <h3>Archive cleanup</h3>
@@ -105,9 +100,7 @@ export default async function QualityPage({
           you choose an action.
         </p>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <Link href="/admin/quality?scan=1" className="btn">
-            {scan ? "Scan again" : "Scan archive"}
-          </Link>
+          <ScanButton hasResults={Boolean(scan)} />
           {duplicates > 0 ? (
             <ConfirmActionButton
               action={redirectAllDuplicatesAction}
@@ -122,7 +115,7 @@ export default async function QualityPage({
       </div>
 
       {scan ? (
-        <div className="card" style={{ padding: 0, overflow: "hidden", marginTop: "1rem" }}>
+        <div id="archive-results" className="card" style={{ padding: 0, overflow: "hidden", marginTop: "1rem", scrollMarginTop: "1rem" }}>
           <p style={{ padding: "0.75rem 1rem", margin: 0 }}>
             Scanned the newest {scan.scanned.toLocaleString()} articles. Showing {scan.rows.length} to review.
           </p>
@@ -152,19 +145,7 @@ export default async function QualityPage({
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-                      <form action={redirectArticleAction} style={{ display: "flex", gap: "0.4rem", flex: 1 }}>
-                        <input type="hidden" name="id" value={row.id} />
-                        <input
-                          type="text"
-                          name="target"
-                          required
-                          aria-label={`Redirect target for ${row.title}`}
-                          defaultValue={row.originalPath ?? ""}
-                          placeholder="/category/article"
-                          style={{ flex: 1, minWidth: 0 }}
-                        />
-                        <button type="submit" className="btn secondary small">301</button>
-                      </form>
+                      <RedirectForm id={row.id} title={row.title} defaultTarget={row.originalPath} />
                       <ConfirmActionButton
                         action={removeArticleAction}
                         id={row.id}
