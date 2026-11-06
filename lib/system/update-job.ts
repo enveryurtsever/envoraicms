@@ -1,5 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { takeBackup, runCommand, getHeadSha, GIT_SAFE_DIR_ARGS } from "./backup";
 import { clearVersionCache, getCurrentVersion } from "./version";
 import { findOwnPm2, scheduleReload } from "./pm2-reload";
@@ -120,8 +122,49 @@ function appendStep(job: UpdateJob, key: StepKey): Step {
   return step;
 }
 
+// Each PM2 worker has its own memory and the worker running an update is
+// replaced at the end of it, so job state also lives in a file every worker can
+// read. Without this, the update screen stays on "in progress" forever.
+const JOB_FILE = join(process.cwd(), "backups", "update-job.json");
+const JOB_SAVE_MS = 1000;
+const JOB_STALE_MS = 2 * 60_000;
+const FINISHED_JOB_VISIBLE_MS = 60 * 60_000;
+const SAVED_LOG_LINES = 1000;
+
+function saveJob(job: UpdateJob): void {
+  try {
+    mkdirSync(join(process.cwd(), "backups"), { recursive: true });
+    const temp = `${JOB_FILE}.${process.pid}.tmp`;
+    writeFileSync(temp, JSON.stringify({ ...job, log: job.log.slice(-SAVED_LOG_LINES) }));
+    renameSync(temp, JOB_FILE);
+  } catch {
+    // Progress display only; the update itself carries on.
+  }
+}
+
+function readSavedJob(): UpdateJob | null {
+  try {
+    const job = JSON.parse(readFileSync(JOB_FILE, "utf8")) as UpdateJob;
+    if (job.status === "running" && Date.now() - statSync(JOB_FILE).mtimeMs > JOB_STALE_MS) {
+      // The worker running it would still be saving, so it must have died.
+      return {
+        ...job,
+        status: "failed",
+        error: "The update stopped unexpectedly. Check the site version and the PM2 logs on the server.",
+      };
+    }
+    return job;
+  } catch {
+    return null;
+  }
+}
+
 export function getJob(): UpdateJob | null {
-  return G.__updateJob ?? null;
+  const own = G.__updateJob;
+  if (own?.status === "running") return own;
+  const job = readSavedJob() ?? own ?? null;
+  if (job?.endedAt && Date.now() - job.endedAt > FINISHED_JOB_VISIBLE_MS) return null;
+  return job;
 }
 
 function setStep(job: UpdateJob, key: StepKey, status: StepStatus) {
@@ -174,6 +217,8 @@ export function startUpdateJob(opts: {
     backupDir: null,
   };
   G.__updateJob = job;
+  saveJob(job);
+  const saving = setInterval(() => saveJob(job), JOB_SAVE_MS);
 
   // Run asynchronously; the API route returns immediately.
   void runUpdate(job).catch(async (err) => {
@@ -193,6 +238,9 @@ export function startUpdateJob(opts: {
     });
     job.status = "failed";
     job.endedAt = Date.now();
+  }).finally(() => {
+    clearInterval(saving);
+    saveJob(job);
   });
 
   return { ok: true, job };
@@ -395,4 +443,5 @@ async function attemptRollback(job: UpdateJob): Promise<void> {
 
 export function clearJob(): void {
   G.__updateJob = null;
+  rmSync(JOB_FILE, { force: true });
 }

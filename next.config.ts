@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Code that builds paths from process.cwd() makes Next's build scan these
+  // folders. They hold uploads and database dumps that only grow, and scanning
+  // them can stall "Collecting build traces". The server reads them from disk.
+  outputFileTracingExcludes: {
+    "*": ["backups/**", "public/Upload/**", "public/Content/**"],
+  },
   poweredByHeader: false,
   compress: true,
   reactStrictMode: true,

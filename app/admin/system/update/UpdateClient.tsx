@@ -59,12 +59,13 @@ export function UpdateClient({ initialStatus, initialJob, updaterEnabled }: Prop
   }, [job?.log.length]);
 
   // After a successful update, the server will reload via pm2. Auto-refresh
-  // the page after a short grace period so the new version's UI loads.
+  // the page after a short grace period so the new version's UI loads. A job
+  // that had already finished when the page opened must not refresh it again.
   useEffect(() => {
-    if (job?.status !== "success") return;
+    if (job?.status !== "success" || initialJob?.status === "success") return;
     const t = setTimeout(() => window.location.reload(), 8000);
     return () => clearTimeout(t);
-  }, [job?.status]);
+  }, [job?.status, initialJob?.status]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);

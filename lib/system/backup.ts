@@ -1,6 +1,6 @@
 import "server-only";
 import { spawn } from "node:child_process";
-import { mkdir, writeFile, copyFile, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile, copyFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { getDbConfig } from "@/lib/db-config";
 
@@ -13,6 +13,8 @@ export type BackupResult = {
 };
 
 const BACKUP_ROOT = join(process.cwd(), "backups");
+const BACKUPS_TO_KEEP = 3;
+const BACKUP_FOLDER = /^\d{8}-\d{6}/;
 
 function ts(): string {
   const d = new Date();
@@ -101,6 +103,29 @@ export async function getHeadSha(): Promise<string> {
   }
 }
 
+/** Deletes all but the newest timestamped backup folders. Other files in the
+ *  backups folder are left alone. A failure here must not stop an update. */
+export async function pruneBackups(
+  root = BACKUP_ROOT,
+  keep = BACKUPS_TO_KEEP,
+  onLine?: (line: string) => void,
+): Promise<void> {
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    const folders = entries
+      .filter((entry) => entry.isDirectory() && BACKUP_FOLDER.test(entry.name))
+      .map((entry) => entry.name)
+      .sort()
+      .reverse();
+    for (const name of folders.slice(keep)) {
+      await rm(join(root, name), { recursive: true, force: true });
+      onLine?.(`[backup] removed old backup ${name}`);
+    }
+  } catch (err) {
+    onLine?.(`[backup] could not remove old backups: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /** Snapshot DB + env + current SHA into ./backups/{ts}. Returns the folder. */
 export async function takeBackup(opts?: {
   label?: string;
@@ -152,5 +177,6 @@ export async function takeBackup(opts?: {
   opts?.onLine?.(`[backup] recorded HEAD: ${sha.slice(0, 10) || "(unknown)"}`);
 
   const dumpStat = await stat(dbDump);
+  await pruneBackups(BACKUP_ROOT, BACKUPS_TO_KEEP, opts?.onLine);
   return { dir, dbDump, envCopy, shaFile, bytes: dumpStat.size };
 }
