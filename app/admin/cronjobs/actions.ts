@@ -144,8 +144,8 @@ function parseForm(fd: FormData): Parsed | string {
       Math.min(30, num(fd, "MaxCategoriesPerTick", 8)),
     );
     config.perCategoryTrendLimit = Math.max(
-      3,
-      Math.min(25, num(fd, "PerCategoryTrendLimit", 8)),
+      1,
+      Math.min(10, num(fd, "PerCategoryTrendLimit", 3)),
     );
   } else {
     if (!seedQuery) return "article_seed";
@@ -158,8 +158,8 @@ function parseForm(fd: FormData): Parsed | string {
   }
 
   config.ideationBatchCount = Math.max(
-    5,
-    Math.min(50, num(fd, "IdeationBatchCount", 20)),
+    1,
+    Math.min(5, num(fd, "IdeationBatchCount", 5)),
   );
   const trendsWindow = str(fd, "TrendsWindow");
   const guidance = str(fd, "Guidance");

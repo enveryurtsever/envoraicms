@@ -24,7 +24,8 @@ export async function saveQualitySettings(fd: FormData): Promise<void> {
       "ReviewGateEnabled"   = ${fd.get("ReviewGateEnabled") === "on"},
       "DuplicateWindowDays" = ${windowDays},
       "PublisherName"       = ${text(fd, "PublisherName")},
-      "ContactEmail"        = ${text(fd, "ContactEmail")}
+      "ContactEmail"        = ${text(fd, "ContactEmail")},
+      "EuConsentEnabled"    = ${fd.get("EuConsentEnabled") === "on"}
     WHERE "IsDeleted" = FALSE
   `;
   revalidateTag("settings");

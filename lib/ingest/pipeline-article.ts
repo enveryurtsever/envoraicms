@@ -85,9 +85,7 @@ export async function runArticleJobTick(args: {
     0,
     typeof cfg.publishStaggerMinutes === "number" ? cfg.publishStaggerMinutes : 15,
   );
-  // High cap (50) is a safety net so a runaway ideation can't hang one tick
-  // forever. ideationBatchCount is clamped to 50 elsewhere, so in practice
-  // this matches the largest plausible refill.
+  // Safety net so a backlog can't hang one tick forever.
   const [drafts, pickAuthor] = await Promise.all([
     listPendingArticleDrafts({ cronId: job.CronID, limit: 50 }),
     buildAuthorPicker(),

@@ -100,7 +100,18 @@ export function ArticlesClient({
                   ) : null}
                   {d.TrendQuery ? (
                     <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: 2 }}>
+                      {d.SeedQuery ? <>seed: <code>{d.SeedQuery}</code> · </> : null}
                       trend: <code>{d.TrendQuery}</code>
+                      {d.TrendType ? <> ({d.TrendType})</> : null}
+                    </div>
+                  ) : null}
+                  {d.SourceUrl ? (
+                    <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: 2 }}>
+                      source:{" "}
+                      <a href={d.SourceUrl} target="_blank" rel="noopener noreferrer">
+                        {d.SourcePublisher ?? d.SourceTitle ?? d.SourceUrl}
+                      </a>
+                      {d.SourcePublishedAt ? ` · ${d.SourcePublishedAt}` : null}
                     </div>
                   ) : null}
                   {d.Message ? (

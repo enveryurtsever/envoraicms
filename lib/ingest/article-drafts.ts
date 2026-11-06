@@ -1,11 +1,14 @@
 import "server-only";
 import { sql } from "@/lib/db";
 import type { ArticleDraft, ArticleDraftStatus } from "@/lib/types";
+import type { GateSource } from "./gate";
 
+// SourceText is large and only the writer needs it (see claimArticleDraft).
 const COLS = sql`
   "DraftID"::text AS "DraftID",
   "FK_CronID", "FK_CatID",
   "Title", "Summary", "Keywords", "ImagePrompt", "Slug", "TrendQuery",
+  "SeedQuery", "TrendType", "SourceUrl", "SourceTitle", "SourcePublisher", "SourcePublishedAt",
   "Status", "FK_ContentID", "Message",
   "CreatedAt"::text  AS "CreatedAt",
   "ProcessedAt"::text AS "ProcessedAt",
@@ -19,7 +22,10 @@ export type ArticleIdea = {
   imagePrompt?: string | null;
   slug?: string | null;
   trendQuery?: string | null;
-  /** Router mode: per-idea category override. Falls back to defaultCatId. */
+  seedQuery?: string | null;
+  trendType?: string | null;
+  source?: GateSource | null;
+  /** Per-idea category override. Falls back to defaultCatId. */
   catId?: number | null;
 };
 
@@ -49,6 +55,13 @@ export async function saveDraftBatch(args: {
         ImagePrompt: idea.imagePrompt ?? null,
         Slug: idea.slug ?? null,
         TrendQuery: idea.trendQuery ?? null,
+        SeedQuery: idea.seedQuery ?? null,
+        TrendType: idea.trendType ?? null,
+        SourceUrl: idea.source?.url ?? null,
+        SourceTitle: idea.source?.title ?? null,
+        SourcePublisher: idea.source?.publisher ?? null,
+        SourcePublishedAt: idea.source?.publishedAt ?? null,
+        SourceText: idea.source?.text ?? null,
         Status: "pending",
         Fk_UserID: creatorId,
       };
@@ -73,6 +86,13 @@ export async function saveDraftBatch(args: {
     "ImagePrompt",
     "Slug",
     "TrendQuery",
+    "SeedQuery",
+    "TrendType",
+    "SourceUrl",
+    "SourceTitle",
+    "SourcePublisher",
+    "SourcePublishedAt",
+    "SourceText",
     "Status",
     "Fk_UserID",
   );
@@ -151,7 +171,7 @@ export async function claimArticleDraft(id: string | number): Promise<ArticleDra
     UPDATE "ArticleDrafts"
        SET "Status" = 'processing'
      WHERE "DraftID" = ${id} AND "Status" = 'pending'
-    RETURNING ${COLS}
+    RETURNING ${COLS}, "SourceText"
   `;
   return rows[0] ?? null;
 }
@@ -205,58 +225,7 @@ export async function deleteArticleDraft(id: string | number): Promise<void> {
   await sql`DELETE FROM "ArticleDrafts" WHERE "DraftID" = ${id}`;
 }
 
-/** For the meta-AI's "what have we already published / queued" hint. */
-export async function recentTitlesForCategory(
-  catId: number,
-  limit = 200,
-): Promise<string[]> {
-  const fromContents = await sql<{ Title: string }[]>`
-    SELECT "ContentTitle" AS "Title" FROM "Contents"
-    WHERE "FK_CatID" = ${catId} AND "IsDeleted" = FALSE
-    ORDER BY "CreatedDate" DESC
-    LIMIT ${limit}
-  `;
-  const fromDrafts = await sql<{ Title: string }[]>`
-    SELECT "Title" FROM "ArticleDrafts"
-    WHERE "FK_CatID" = ${catId} AND "Status" IN ('pending','processing','done')
-    ORDER BY "CreatedAt" DESC
-    LIMIT ${limit}
-  `;
-  return [...fromContents, ...fromDrafts].map((r) => r.Title).filter(Boolean);
-}
-
-/** Router-mode dedupe hint: recent titles for a SET of categories at once,
- *  capped per category so the prompt stays compact. */
-export async function recentTitlesForCategoryMap(
-  catIds: number[],
-  perCategoryLimit = 30,
-): Promise<Map<number, string[]>> {
-  const out = new Map<number, string[]>();
-  if (catIds.length === 0) return out;
-  for (const id of catIds) out.set(id, []);
-
-  const cap = Math.max(5, Math.min(100, perCategoryLimit));
-  const rows = await sql<{ FK_CatID: number; Title: string }[]>`
-    SELECT "FK_CatID", "Title"
-    FROM (
-      SELECT "FK_CatID", "ContentTitle" AS "Title", "CreatedDate" AS "ts",
-             ROW_NUMBER() OVER (PARTITION BY "FK_CatID" ORDER BY "CreatedDate" DESC) AS rn
-      FROM "Contents"
-      WHERE "FK_CatID" = ANY(${catIds}) AND "IsDeleted" = FALSE
-      UNION ALL
-      SELECT "FK_CatID", "Title", "CreatedAt" AS "ts",
-             ROW_NUMBER() OVER (PARTITION BY "FK_CatID" ORDER BY "CreatedAt" DESC) AS rn
-      FROM "ArticleDrafts"
-      WHERE "FK_CatID" = ANY(${catIds}) AND "Status" IN ('pending','processing','done')
-    ) t
-    WHERE rn <= ${cap}
-    ORDER BY "FK_CatID", "ts" DESC
-  `;
-  for (const r of rows) {
-    if (!r.Title) continue;
-    const list = out.get(r.FK_CatID);
-    if (!list) continue;
-    if (list.length < cap) list.push(r.Title);
-  }
-  return out;
+export async function sourceAlreadyDrafted(url: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM "ArticleDrafts" WHERE "SourceUrl" = ${url} LIMIT 1`;
+  return rows.length > 0;
 }

@@ -40,8 +40,20 @@ export function startScheduler(): void {
   setInterval(() => void tick(), TICK_INTERVAL_MS).unref?.();
 }
 
+/** Next creates the cache behind unstable_cache when a worker serves its first
+ *  request, and jobs fail without it. A worker that hasn't served one yet sends
+ *  itself a request and waits for the next tick. Under PM2 the request may reach
+ *  another worker, but this one soon gets its own traffic, and any ready worker
+ *  can run the jobs meanwhile. */
+function cacheReady(): boolean {
+  if ((globalThis as { __incrementalCache?: unknown }).__incrementalCache) return true;
+  const port = process.env.PORT || "3000";
+  void fetch(`http://127.0.0.1:${port}/api/health`).catch(() => undefined);
+  return false;
+}
+
 async function tick(): Promise<void> {
-  if (ticking) return;
+  if (ticking || !cacheReady()) return;
   ticking = true;
   try {
     // Cluster-safe: the first worker to grab the lock runs the batch; others

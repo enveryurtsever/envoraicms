@@ -1,10 +1,13 @@
 import "server-only";
 import { requireApiKey } from "@/lib/ingest/config";
 import { alreadyIngested } from "@/lib/ingest/db";
-import { decodeEntities, htmlToText, isFreshSource, MAX_SOURCE_AGE_DAYS } from "./checks";
+import { sourceAlreadyDrafted } from "@/lib/ingest/article-drafts";
+import { decodeEntities, htmlToText, isFreshSource, joinSourceText, MAX_SOURCE_AGE_DAYS } from "./checks";
 import type { GateSource } from "./engine";
 
 export const MIN_SOURCE_CHARS = 400;
+// Below this, API text is usually a summary, so the full page is worth fetching.
+const FULL_ARTICLE_CHARS = 1500;
 const MAX_SOURCE_CHARS = 12_000;
 const MAX_DOWNLOAD_BYTES = 2_000_000;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -79,14 +82,15 @@ export async function resolveSource(args: {
   url: string | null | undefined;
   title: string | null | undefined;
   publisher: string | null | undefined;
-  suppliedText: string | null | undefined;
+  /** Every text field the news API supplied. */
+  suppliedText: (string | null | undefined)[];
   publishedAt?: string | null;
 }): Promise<GateSource | null> {
   const url = args.url ?? "";
-  const supplied = htmlToText(args.suppliedText ?? "").slice(0, MAX_SOURCE_CHARS);
-  const text =
-    supplied.length >= MIN_SOURCE_CHARS ? supplied : url ? await fetchSourceText(url) : null;
-  if (!text) return null;
+  const supplied = joinSourceText(args.suppliedText);
+  const page = supplied.length < FULL_ARTICLE_CHARS && url ? await fetchSourceText(url) : null;
+  const text = joinSourceText([supplied, page]).slice(0, MAX_SOURCE_CHARS);
+  if (text.length < MIN_SOURCE_CHARS) return null;
   return {
     url,
     title: args.title ?? "",
@@ -128,7 +132,7 @@ export async function findNewsSources(args: {
     if (typeof row.link !== "string" || typeof row.title !== "string") continue;
     const publishedAt = typeof row.iso_date === "string" ? row.iso_date : null;
     if (!isFreshSource(publishedAt)) continue;
-    if (await alreadyIngested(row.link)) continue;
+    if ((await alreadyIngested(row.link)) || (await sourceAlreadyDrafted(row.link))) continue;
     const text = await fetchSourceText(row.link);
     if (!text) continue;
     sources.push({

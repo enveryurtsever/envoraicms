@@ -62,7 +62,7 @@ export async function runPipeline(input: PipelineInput): Promise<PipelineOutcome
         url: article.url,
         title: article.title,
         publisher: article.publisher?.name,
-        suppliedText: fullContent ?? article.excerpt,
+        suppliedText: [article.excerpt, fullContent],
         publishedAt: article.date,
       });
       const rewritten = await text.rewrite(article, cat, source?.text ?? fullContent);

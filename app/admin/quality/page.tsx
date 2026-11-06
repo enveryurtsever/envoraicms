@@ -90,6 +90,26 @@ export default async function QualityPage({
             />
           </div>
         </div>
+        <div className="form-row">
+          <label htmlFor="EuConsentEnabled">EU consent message</label>
+          <div>
+            <label style={{ fontWeight: 400, padding: 0, display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+              <input
+                id="EuConsentEnabled"
+                name="EuConsentEnabled"
+                type="checkbox"
+                defaultChecked={settings.EuConsentEnabled}
+                className="switch"
+              />
+              A consent message is live for visitors from Europe
+            </label>
+            <small>
+              Turn on after enabling the European message in AdSense under Privacy &amp; messaging,
+              or after installing another Google-certified consent platform. The generated Privacy
+              page describes it only when this is on.
+            </small>
+          </div>
+        </div>
       </QualitySettingsForm>
 
       <div className="card" style={{ marginTop: "1rem" }}>

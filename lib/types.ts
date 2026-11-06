@@ -43,6 +43,7 @@ export type Settings = {
   DuplicateWindowDays: number;
   PublisherName: string | null;
   ContactEmail: string | null;
+  EuConsentEnabled: boolean;
   LlmsTxtEnabled: boolean;
   LlmsTxtIntro: string | null;
   SocialLinks: SocialLink[];
@@ -103,8 +104,8 @@ export type CronJobConfig = {
   seedQuery?: string;            // single-cat mode only: "AI productivity tools"
   targetCatId?: number;          // single-cat mode only: site category to file under
   maxCategoriesPerTick?: number; // router mode: cap on categories hit per refill (SerpAPI quota)
-  perCategoryTrendLimit?: number;// router mode: trends to fetch per category (default 8)
-  ideationBatchCount?: number;   // how many drafts to ideate per refill (10/20/30)
+  perCategoryTrendLimit?: number;// trends to try per category before moving on (default 3)
+  ideationBatchCount?: number;   // most drafts to create per refill (1-5)
   trendsWindow?: string;         // SerpAPI date enum (default "now 7-d")
   autoRefill?: boolean;          // when pending=0, auto-trigger ideation
   publishStaggerMinutes?: number;// gap between publish dates of articles inserted in the same tick (default 15)
@@ -151,6 +152,14 @@ export type ArticleDraft = {
   ImagePrompt: string | null;
   Slug: string | null;
   TrendQuery: string | null;
+  SeedQuery: string | null;
+  TrendType: string | null;
+  SourceUrl: string | null;
+  SourceTitle: string | null;
+  SourcePublisher: string | null;
+  SourcePublishedAt: string | null;
+  /** Present only on a claimed draft. */
+  SourceText?: string | null;
   Status: ArticleDraftStatus;
   FK_ContentID: number | null;
   Message: string | null;

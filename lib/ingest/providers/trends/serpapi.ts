@@ -1,8 +1,11 @@
 import "server-only";
 import { requireApiKey } from "@/lib/ingest/config";
 
+export type TrendQueryType = "rising" | "top";
+
 export type TrendItem = {
   query: string;
+  queryType: TrendQueryType;
   volume?: number;
   meta?: unknown;
 };
@@ -25,9 +28,9 @@ export type TrendsWindow =
 
 const DEFAULT_WINDOW: TrendsWindow = "now 7-d";
 
-/** Fetches trending queries related to a seed via SerpAPI's google_trends
- *  engine (data_type=RELATED_QUERIES). Falls back to google_trends_trending_now
- *  if the related-queries response is empty.
+/** Fetches queries related to a seed via SerpAPI's google_trends engine
+ *  (data_type=RELATED_QUERIES), rising before top. An empty list means Google
+ *  has no related data for this seed.
  *
  *  Throws on transport / auth errors. Returns up to `limit` items. */
 export async function fetchRelatedTrends(args: {
@@ -46,7 +49,6 @@ export async function fetchRelatedTrends(args: {
 
   const key = await requireApiKey("serpapi", "trends_source");
 
-  // 1) RELATED_QUERIES — the rich path.
   const related = await callSerpApi(key.plaintext, {
     engine: "google_trends",
     q: seed,
@@ -55,16 +57,7 @@ export async function fetchRelatedTrends(args: {
     hl: lang,
     date: window,
   });
-  const fromRelated = parseRelatedQueries(related, limit);
-  if (fromRelated.length > 0) return fromRelated;
-
-  // 2) Fallback: trending now in the same geo (this engine ignores `date`).
-  const trending = await callSerpApi(key.plaintext, {
-    engine: "google_trends_trending_now",
-    geo: country.toUpperCase(),
-    hl: lang,
-  });
-  return parseTrendingNow(trending, limit);
+  return parseRelatedQueries(related, limit);
 }
 
 async function callSerpApi(
@@ -113,34 +106,9 @@ function parseRelatedQueries(json: unknown, limit: number): TrendItem[] {
           : typeof valueRaw === "string"
             ? Number.parseInt(valueRaw, 10) || undefined
             : undefined;
-      out.push({ query: q, volume, meta: row });
+      out.push({ query: q, queryType: bucket, volume, meta: row });
       if (out.length >= limit) return out;
     }
-  }
-  return out;
-}
-
-function parseTrendingNow(json: unknown, limit: number): TrendItem[] {
-  if (!isObject(json)) return [];
-  const list =
-    (json as { trending_searches?: unknown }).trending_searches ??
-    (json as { trends?: unknown }).trends;
-  if (!Array.isArray(list)) return [];
-  const out: TrendItem[] = [];
-  const seen = new Set<string>();
-  for (const row of list) {
-    if (!isObject(row)) continue;
-    const q =
-      (typeof row.query === "string" && row.query.trim()) ||
-      (typeof (row as { title?: unknown }).title === "string" &&
-        ((row as { title: string }).title).trim()) ||
-      null;
-    if (!q) continue;
-    const key = q.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ query: q, meta: row });
-    if (out.length >= limit) return out;
   }
   return out;
 }

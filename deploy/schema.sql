@@ -468,6 +468,7 @@ ALTER TABLE "Settings"
   ADD COLUMN IF NOT EXISTS "DuplicateWindowDays" INTEGER NOT NULL DEFAULT 60,
   ADD COLUMN IF NOT EXISTS "PublisherName"       TEXT,
   ADD COLUMN IF NOT EXISTS "ContactEmail"        TEXT,
+  ADD COLUMN IF NOT EXISTS "EuConsentEnabled"    BOOLEAN NOT NULL DEFAULT FALSE,
   -- Replaces ShowViewCounts so every site starts hidden without a later
   -- migration overwriting an owner's choice to turn counts back on.
   ADD COLUMN IF NOT EXISTS "PublicViewCounts"    BOOLEAN NOT NULL DEFAULT FALSE;
@@ -483,6 +484,28 @@ UPDATE "Contents" SET "AwaitingActivation" = TRUE
    AND "PublishDate" > NOW();
 
 ALTER TABLE "Links" ADD COLUMN IF NOT EXISTS "ModifiedDate" TIMESTAMP;
+
+-- Trend ideation: each refill queries a category's next keyword, and each draft
+-- records the keyword, trend and news article it came from.
+ALTER TABLE "Categories"
+  ADD COLUMN IF NOT EXISTS "TrendKeywordCursor" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "ArticleDrafts"
+  ADD COLUMN IF NOT EXISTS "SeedQuery"         TEXT,
+  ADD COLUMN IF NOT EXISTS "TrendType"         TEXT,
+  ADD COLUMN IF NOT EXISTS "SourceUrl"         TEXT,
+  ADD COLUMN IF NOT EXISTS "SourceTitle"       TEXT,
+  ADD COLUMN IF NOT EXISTS "SourcePublisher"   TEXT,
+  ADD COLUMN IF NOT EXISTS "SourcePublishedAt" TEXT,
+  ADD COLUMN IF NOT EXISTS "SourceText"        TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_articledrafts_source_url"
+  ON "ArticleDrafts" ("SourceUrl") WHERE "SourceUrl" IS NOT NULL;
+
+-- Drafts queued from a trend alone can't be written from a source. Safe to
+-- re-run: every draft created from now on has source text.
+DELETE FROM "ArticleDrafts" WHERE "Status" = 'pending' AND "SourceText" IS NULL;
+
+-- Replaced by article_idea_from_source, which works from a news article.
+UPDATE "Prompts" SET "IsDeleted" = TRUE WHERE "PromptKey" = 'article_ideation';
 
 -- Retired article URLs: 301 to a replacement, or 410 when gone for good.
 CREATE TABLE IF NOT EXISTS "UrlRules" (

@@ -313,9 +313,9 @@ export function CronJobFields({
                   type="text"
                   name="SeedQuery"
                   defaultValue={(cfg.seedQuery as string | undefined) ?? ""}
-                  placeholder="e.g. AI productivity tools"
+                  placeholder="e.g. AI productivity tools, AI chips"
                 />
-                <small>The seed Google Trends will use to find related trending queries.</small>
+                <small>Separate topics with commas. Each refill looks up the next one in Google Trends.</small>
               </div>
             </div>
 
@@ -349,8 +349,8 @@ export function CronJobFields({
                   defaultValue={(cfg.maxCategoriesPerTick as number | undefined) ?? 8}
                 />
                 <small>
-                  How many active categories to seed SerpAPI with on each refill.
-                  Each one consumes a SerpAPI call — keep this within your quota.
+                  The most categories to look up on each refill, least recently used first.
+                  Each one uses a SerpAPI search.
                 </small>
               </div>
             </div>
@@ -361,24 +361,24 @@ export function CronJobFields({
                   id="PerCategoryTrendLimit"
                   type="number"
                   name="PerCategoryTrendLimit"
-                  min={3}
-                  max={25}
-                  defaultValue={(cfg.perCategoryTrendLimit as number | undefined) ?? 8}
+                  min={1}
+                  max={10}
+                  defaultValue={(cfg.perCategoryTrendLimit as number | undefined) ?? 3}
                 />
                 <small>
-                  Trends fetched per category; the meta AI then picks the strongest
-                  ones across the pool and routes each idea to its best-fit category.
+                  How many trends to try for a category before moving on. Each try
+                  uses a SerpAPI news search.
                 </small>
               </div>
             </div>
             <div className="form-row" style={{ alignItems: "flex-start" }}>
               <label>How it works</label>
               <small style={{ color: "#475569", lineHeight: 1.45 }}>
-                Each category's keywords (or name) seed a SerpAPI trend lookup.
-                All trends are pooled and sent — tagged with their origin category —
-                to the meta AI, which rewrites each into an editorial title and
-                picks the best <code>categoryId</code> for it. Drafts land in the
-                category the AI chose, not necessarily where the trend came from.
+                Each refill looks up one keyword per category in Google Trends, then
+                searches recent news for its trends. The meta AI writes the idea from
+                that article, and no draft is created if the article's main subject
+                doesn&apos;t fit the category. A category with no trends is skipped
+                until the next refill.
               </small>
             </div>
           </>
@@ -391,13 +391,13 @@ export function CronJobFields({
               id="IdeationBatchCount"
               type="number"
               name="IdeationBatchCount"
-              min={5}
-              max={50}
-              defaultValue={(cfg.ideationBatchCount as number | undefined) ?? 20}
+              min={1}
+              max={5}
+              defaultValue={Math.min((cfg.ideationBatchCount as number | undefined) ?? 5, 5)}
             />
             <small>
-              When pending drafts run out, this many fresh ideas are generated in
-              one go. 20 is a good default; SerpAPI quota allowing.
+              The most new drafts to create when the queue runs out. A refill can
+              create fewer when there isn&apos;t enough fitting news.
             </small>
           </div>
         </div>

@@ -185,7 +185,7 @@ export async function processPendingDrafts(args: {
         url: article.url ?? draft.SourceUrl,
         title: article.title,
         publisher: article.publisher?.name,
-        suppliedText: article.text ?? article.excerpt,
+        suppliedText: [article.excerpt, article.short_description as string | null | undefined, article.text],
         publishedAt: article.date,
       });
       const rewritten = await rewriteWithCategory({

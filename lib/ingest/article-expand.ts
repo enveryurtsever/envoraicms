@@ -11,14 +11,11 @@ import { fixSearchLinks } from "./sanitize-links";
 import { currentDateContext } from "./prompt-context";
 import { getSettings } from "@/lib/queries/settings";
 import { evaluateForPublish } from "./gate";
-import { GROUNDING_RULES } from "./gate/checks";
-import { findNewsSources } from "./gate/sources";
+import { GROUNDING_RULES, isFreshSource, MAX_SOURCE_AGE_DAYS } from "./gate/checks";
 import type { GateSource } from "./gate";
 import {
   languageEnglishName,
   locationEnglishName,
-  newsLanguage,
-  serpapiGeo,
 } from "@/lib/site-language";
 import type { AuthorPicker } from "@/lib/queries/authors";
 import {
@@ -50,7 +47,7 @@ export type ExpandOutcome =
   | { contentId: number }
   | { contentId: null; reason: string };
 
-/** Finds source reporting for a draft, writes the article from it, runs the
+/** Writes the article from the draft's source, runs the
  *  publishing checks, and INSERTs into Contents. contentId is null when the
  *  draft was dropped. Caller is responsible for marking the draft. */
 export async function expandArticleDraft(args: {
@@ -74,23 +71,20 @@ export async function expandArticleDraft(args: {
   const languageName = languageEnglishName(settings.SiteLanguage);
   const countryName = locationEnglishName(settings.SiteLocation);
 
-  // Trend-driven drafts begin with only a keyword, so real reporting has to be
-  // found first. Checked before the AI call so an unsourced draft costs nothing.
-  const sources = await findNewsSources({
-    query: draft.TrendQuery?.trim() || draft.Title,
-    location: serpapiGeo(settings.SiteLocation),
-    language: newsLanguage(settings.SiteLanguage),
-  }).catch((err): GateSource[] => {
-    log.push(
-      `[draft#${draft.DraftID}] source search failed: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-    return [];
-  });
-  if (sources.length === 0 && settings.ReviewGateEnabled) {
-    return { contentId: null, reason: "No source reporting found for this topic." };
+  // The idea came from this article, so the piece is written from it too.
+  if (!draft.SourceText) {
+    return { contentId: null, reason: "Draft has no source article." };
   }
+  if (!isFreshSource(draft.SourcePublishedAt)) {
+    return { contentId: null, reason: `Source is older than ${MAX_SOURCE_AGE_DAYS} days.` };
+  }
+  const sources: GateSource[] = [{
+    url: draft.SourceUrl ?? "",
+    title: draft.SourceTitle ?? draft.Title,
+    publisher: draft.SourcePublisher,
+    text: draft.SourceText,
+    publishedAt: draft.SourcePublishedAt,
+  }];
 
   const systemTemplate =
     (await getPromptTemplate("article_expand")) || DEFAULT_EXPAND_SYSTEM;
@@ -263,7 +257,7 @@ function buildExpandPrompt(args: {
     ? args.sources
         .map((s, i) => `Source ${i + 1}: ${s.title} (${s.url})${s.publishedAt ? `, published ${s.publishedAt}` : ""}\n${s.text}`)
         .join("\n\n")
-    : "(none supplied: report only what the brief states, with no quotes or statistics)";
+    : "(none)";
   return [
     currentDateContext(),
     "",
@@ -271,7 +265,6 @@ function buildExpandPrompt(args: {
     `Target audience: readers in ${args.countryName}. Pick examples, sources, and tone for that audience.`,
     "",
     `Site category: ${args.category.CatName} (slug: ${args.category.CatSeo})`,
-    `Source trend (search query that inspired this piece): ${d.TrendQuery ?? "(none)"}`,
     `Seed title: ${d.Title}`,
     d.Summary ? `Seed summary: ${d.Summary}` : "",
     d.Keywords ? `Seed keywords: ${d.Keywords}` : "",

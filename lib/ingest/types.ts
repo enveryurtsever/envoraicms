@@ -23,6 +23,7 @@ export type IngestCategory = {
 export type RoutableCategory = IngestCategory & {
   CatKeywords: string | null;
   CatDesc: string | null;
+  TrendKeywordCursor: number;
 };
 
 export type Rewritten = {

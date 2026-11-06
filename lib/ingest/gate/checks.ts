@@ -16,6 +16,22 @@ SOURCE RULES (these override every other instruction above, including any reques
 
 export const MAX_SOURCE_AGE_DAYS = 7;
 
+/** Joins source fields, skipping any that only repeat text already included.
+ *  News APIs often send the same summary in several fields. */
+export function joinSourceText(parts: (string | null | undefined)[]): string {
+  const kept: string[] = [];
+  for (const part of parts) {
+    const text = part ? htmlToText(part) : "";
+    if (!text) continue;
+    const covered = kept.findIndex((existing) => existing.includes(text));
+    if (covered !== -1) continue;
+    const longer = kept.findIndex((existing) => text.includes(existing));
+    if (longer !== -1) kept[longer] = text;
+    else kept.push(text);
+  }
+  return kept.join("\n");
+}
+
 /** False only for a source known to be too old. A missing or unreadable date
  *  passes, since many feeds omit it and search results are already recent. */
 export function isFreshSource(published: string | null | undefined, now = new Date()): boolean {

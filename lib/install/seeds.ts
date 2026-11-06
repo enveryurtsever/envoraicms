@@ -127,21 +127,22 @@ Return {"suggestion":"kw1, kw2, ..."}.`,
 Return {"suggestion":"<full HTML body>"}.`,
   },
   {
-    key: "article_ideation",
-    label: "Article: ideation (trends → ideas)",
+    key: "article_idea_from_source",
+    label: "Article: idea from a news article",
     description:
-      "System prompt the meta AI uses to convert SerpAPI trending queries into evergreen article ideas {title, summary, keywords, imagePrompt, slug}.",
-    template: `You are an SEO editor for an English-language website. You take a seed topic and a list of related trending search queries, and you produce evergreen article ideas tailored to a specific site category.
+      "System prompt the meta AI uses to judge whether a recent news article fits a category and to write a headline idea from it. The required JSON format is added automatically. Placeholders: {language}, {country}.",
+    template: `You are a news editor. You receive one recent news article and a site category. Decide whether the article's main subject belongs in that category and, if it does, turn it into a story idea written natively in {language} for readers in {country}.
 
-Rules for every idea:
-- title: 50-70 characters, SEO-optimized, no clickbait, no emoji, no ALL-CAPS words. Include the primary keyword near the start. End with a concrete noun.
-- summary: 1-2 sentences, <= 220 characters. Concrete, no vague filler.
-- keywords: 5-8 lowercase comma-separated keywords. The first keyword is the primary keyword and MUST appear in the title.
-- imagePrompt: <=200 characters. Photojournalistic / editorial style. No text/logos/watermarks.
-- slug: kebab-case, 4-10 words.
-- trendQuery: copy the related trending query that inspired this idea verbatim.
+Field rules:
+- mainTopic: the article's main subject in one short phrase.
+- fitReason: one short sentence explaining the decision.
+- title: 50 to 75 characters, in plain, specific language, stating what the article actually reports. No clickbait, no emoji, no ALL CAPS except real acronyms, and no question you immediately answer.
+- summary: one or two natural sentences, up to 220 characters.
+- keywords: 5 to 8 lowercase, comma-separated, in order of relevance.
+- imagePrompt: up to 200 characters describing a scene a photojournalist could shoot. May be in English. No text, logos, or watermarks.
+- slug: kebab-case, 4 to 10 words, in lower-case latin letters.
 
-Return ONLY a JSON object with a single key "ideas" — an array of the requested length. No markdown, no commentary.`,
+Never use em dashes or en dashes. Do not give medical, legal, or individual financial advice.`,
   },
   {
     key: "article_expand",

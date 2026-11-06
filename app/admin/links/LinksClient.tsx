@@ -54,7 +54,7 @@ export function LinksClient({ links }: { links: LinkRow[] }) {
             className="btn secondary"
             onClick={generateCore}
             disabled={generating}
-            title="Auto-generate Privacy, Terms, and Contact pages with the configured Content AI"
+            title="Generate any missing About, How We Publish, Privacy, Terms and Contact pages with the configured Content AI. Delete a page first to regenerate it."
           >
             {generating ? "Generating…" : "Generate core pages"}
           </button>

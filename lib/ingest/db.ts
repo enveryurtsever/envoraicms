@@ -113,22 +113,20 @@ export async function getIngestCategory(catId: number): Promise<IngestCategory |
   return rows[0] ?? null;
 }
 
-/** Active categories that the article router can seed trend lookups for and
- *  let the meta-AI route ideas into. Skips categories with neither keywords
- *  nor a usable name (defensive — the seed must produce something searchable).
- *  Order: CatNumber ASC then CatID — same as header rendering. */
+/** Active categories that trend lookups can seed from. Least-queried first, so
+ *  a small per-refill cap still reaches every category over time. */
 export async function listActiveRoutableCategories(
   limit?: number,
 ): Promise<RoutableCategory[]> {
   const cap = Math.max(1, Math.min(100, limit ?? 50));
   return sql<RoutableCategory[]>`
-    SELECT "CatID","CatName","CatSeo","CatKeywords","CatDesc"
+    SELECT "CatID","CatName","CatSeo","CatKeywords","CatDesc","TrendKeywordCursor"
     FROM "Categories"
     WHERE "IsActive" = TRUE
       AND "IsDeleted" = FALSE
       AND "CatName" IS NOT NULL
       AND "CatSeo" IS NOT NULL
-    ORDER BY "CatNumber" ASC NULLS LAST, "CatID" ASC
+    ORDER BY "TrendKeywordCursor" ASC, "CatNumber" ASC NULLS LAST, "CatID" ASC
     LIMIT ${cap}
   `;
 }

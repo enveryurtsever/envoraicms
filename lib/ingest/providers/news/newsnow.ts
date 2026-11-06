@@ -192,7 +192,7 @@ function toArticle(raw: unknown): NewsNowArticle | null {
     ...raw,
     title,
     url,
-    excerpt: pickString(raw, ["excerpt", "description", "summary", "snippet"]),
+    excerpt: pickString(raw, ["short_description", "excerpt", "description", "summary", "snippet"]),
     top_image: pickString(raw, ["top_image", "image", "urlToImage", "thumbnail"]),
     date: pickString(raw, ["date", "publishedAt", "pubDate", "published"]),
     authors: Array.isArray(raw.authors)
