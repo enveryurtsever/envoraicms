@@ -1,8 +1,8 @@
 import "server-only";
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { takeBackup, runCommand, getHeadSha, GIT_SAFE_DIR_ARGS } from "./backup";
 import { clearVersionCache, getCurrentVersion } from "./version";
+import { findOwnPm2, scheduleReload } from "./pm2-reload";
 
 /** PM2 app name to reload. Mirrors the resolution order in
  *  deploy/ecosystem.config.js so the updater drives whatever name PM2 is
@@ -288,29 +288,27 @@ async function runUpdate(job: UpdateJob): Promise<void> {
     throw err;
   }
 
-  // 7. pm2 reload — fire and forget so we can return a response.
-  // pm2 reload is graceful in cluster mode, so in-flight requests survive.
+  // 7. pm2 reload. Graceful in cluster mode, so in-flight requests survive.
+  // The new code is already built, so a failure here doesn't roll back: the
+  // site only needs a reload.
   setStep(job, "reload", "running");
-  logLine(job, "[reload] scheduling pm2 reload in 1s …");
+  clearVersionCache();
+  const own = await findOwnPm2();
+  if (!own) {
+    const message = `The update is installed, but no PM2 process was found for this folder, so the site is still running the old version. Run "pm2 reload ${job.pm2AppName}" on the server.`;
+    logLine(job, `[reload] ${message}`, "error");
+    setStep(job, "reload", "failed");
+    job.error = message;
+    job.status = "failed";
+    job.endedAt = Date.now();
+    return;
+  }
+  job.pm2AppName = own.name;
+  const logFile = scheduleReload(own);
+  logLine(job, `[reload] reloading ${own.name} (PM2 ids ${own.ids.join(", ")}). Output: ${logFile}`);
+  setStep(job, "reload", "done");
   job.status = "success";
   job.endedAt = Date.now();
-  setStep(job, "reload", "done");
-  clearVersionCache();
-
-  setTimeout(() => {
-    try {
-      const child = spawn("pm2", ["reload", pm2AppName()], {
-        detached: true,
-        stdio: "ignore",
-        env: process.env,
-      });
-      child.unref();
-    } catch {
-      /* pm2 missing — user is presumably in dev or running without pm2;
-         they will need to restart manually. The step is already marked done
-         so the UI doesn't hang waiting for it. */
-    }
-  }, 1000);
 }
 
 /** Auto-rollback procedure invoked when any update step throws. Restores
@@ -378,21 +376,20 @@ async function attemptRollback(job: UpdateJob): Promise<void> {
     return;
   }
 
-  logLine(job, `[rollback] code restored; scheduling pm2 reload …`);
   clearVersionCache();
-  setTimeout(() => {
-    try {
-      const child = spawn("pm2", ["reload", pm2AppName()], {
-        detached: true,
-        stdio: "ignore",
-        env: process.env,
-      });
-      child.unref();
-    } catch {
-      /* pm2 missing — operator must reload manually. The step is already
-         marked done so the UI doesn't hang. */
-    }
-  }, 1000);
+  const own = await findOwnPm2();
+  if (!own) {
+    logLine(
+      job,
+      `[rollback] code restored, but no PM2 process was found for this folder. Run "pm2 reload ${job.pm2AppName}" on the server.`,
+      "error",
+    );
+    finish("failed");
+    return;
+  }
+  job.pm2AppName = own.name;
+  scheduleReload(own);
+  logLine(job, `[rollback] code restored; reloading ${own.name} (PM2 ids ${own.ids.join(", ")})`);
   finish("done");
 }
 
