@@ -1,13 +1,12 @@
 import { Resolver } from "node:dns/promises";
 import { isIP } from "node:net";
 
-// Temporary per-IP bans for clients that request pages too quickly.
+// Temporary per-IP bans for clients sending requests faster than a person can.
+// Limits are per second, so a slow crawl or a busy reader is never banned.
 //
 // State lives in this process's memory. Under PM2 cluster mode each worker
-// counts on its own, so limits apply per worker: a client spread evenly over
-// N workers can make up to N x limit requests before every worker bans it.
-// The defaults are deliberately low enough to still catch that, and high
-// enough that a person is safe even if all their requests hit one worker.
+// counts on its own, so a client spread evenly over N workers can make up to
+// N x limit requests per second before every worker bans it.
 
 function positiveIntEnv(name: string, fallback: number): number {
   const parsed = Number(process.env[name]);
@@ -15,18 +14,18 @@ function positiveIntEnv(name: string, fallback: number): number {
 }
 
 const ENABLED = process.env.IP_GUARD_ENABLED !== "false";
-const PAGE_LIMIT = positiveIntEnv("IP_GUARD_PAGE_LIMIT", 60);
-const SEARCH_LIMIT = positiveIntEnv("IP_GUARD_SEARCH_LIMIT", 15);
+const PAGES_PER_SECOND = positiveIntEnv("IP_GUARD_PAGES_PER_SECOND", 5);
+const SEARCHES_PER_SECOND = positiveIntEnv("IP_GUARD_SEARCHES_PER_SECOND", 3);
 const BAN_MS = positiveIntEnv("IP_GUARD_BAN_MINUTES", 30) * 60_000;
 
-const WINDOW_MS = 60_000;
+const WINDOW_MS = 1000;
 const CRAWLER_CACHE_MS = 24 * 60 * 60_000;
 const MAX_TRACKED = 100_000;
 // Next prefetches every link in the viewport, so one reader scrolling a
 // homepage can send dozens of same-origin fetches. They count, but only a
 // little. A bot can forge the headers that identify them, which is why this
 // is a discount and not an exemption.
-const BACKGROUND_FETCH_WEIGHT = 0.1;
+const BACKGROUND_FETCH_WEIGHT = 0.05;
 
 // https://www.cloudflare.com/ips/ — a request arriving from one of these is
 // the only case where the CF-Connecting-IP header can be trusted.
@@ -239,10 +238,10 @@ export function checkIpGuard(
   counter.pages += weight;
   if (request.isSearch) counter.searches += weight;
 
-  if (counter.searches > SEARCH_LIMIT) {
-    banUnlessCrawler(ip, key, `over ${SEARCH_LIMIT} searches/min`);
-  } else if (counter.pages > PAGE_LIMIT) {
-    banUnlessCrawler(ip, key, `over ${PAGE_LIMIT} pages/min`);
+  if (counter.searches > SEARCHES_PER_SECOND) {
+    banUnlessCrawler(ip, key, `over ${SEARCHES_PER_SECOND} searches/sec`);
+  } else if (counter.pages > PAGES_PER_SECOND) {
+    banUnlessCrawler(ip, key, `over ${PAGES_PER_SECOND} pages/sec`);
   }
   return { blocked: false };
 }
