@@ -231,6 +231,8 @@ If that fails too, reset: `sudo -u postgres psql -c "ALTER USER envoraicms WITH 
 
 **Admin login locks out everyone after one bot scan** — the reverse proxy isn't forwarding the real client IP. Add `X-Real-IP` / `X-Forwarded-For` headers in the proxy config.
 
+**Visitors get `429 Too many requests`** — the built-in IP guard temporarily bans an IP after 60 page requests or 15 searches in a minute, per PM2 worker. Bans last 30 minutes and are logged as `[ip-guard] banned ...` in the PM2 logs. Verified search engine crawlers and signed-in admins in `/admin` are exempt. Cloudflare's forwarded IP is detected automatically. If the site sits behind another CDN or load balancer, make your reverse proxy restore the visitor's IP in `X-Real-IP`, or every visitor shares one address and one ban. Tune it with the `IP_GUARD_*` variables in `.env.example`, then run `pm2 reload <app>`; `IP_GUARD_ENABLED=false` turns it off.
+
 ---
 
 ## External services
